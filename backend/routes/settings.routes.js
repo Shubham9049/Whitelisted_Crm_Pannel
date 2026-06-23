@@ -8,6 +8,7 @@ const upload = multer({ storage });
 const settingsController = require("../controllers/settingsController");
 
 router.get("/", settingsController.getSettings);
+router.get("/lead-form", settingsController.getLeadFormSettings);
 
 router.put(
   "/branding",
@@ -16,5 +17,6 @@ router.put(
 );
 
 router.put("/modules", settingsController.updateModules);
+router.put("/lead-form", settingsController.updateLeadFormSettings);
 
 module.exports = router;

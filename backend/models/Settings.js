@@ -1,5 +1,44 @@
 const mongoose = require("mongoose");
 
+const leadFormFieldSchema = new mongoose.Schema(
+  {
+    id: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    label: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    type: {
+      type: String,
+      enum: ["text", "textarea", "email", "number", "select", "checkbox", "date"],
+      default: "text",
+    },
+
+    required: {
+      type: Boolean,
+      default: false,
+    },
+
+    placeholder: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    options: {
+      type: [String],
+      default: [],
+    },
+  },
+  { _id: false },
+);
+
 const settingsSchema = new mongoose.Schema({
   branding: {
     companyName: {
@@ -44,6 +83,11 @@ const settingsSchema = new mongoose.Schema({
       default: true,
     },
 
+    clients: {
+      type: Boolean,
+      default: true,
+    },
+
     vendors: {
       type: Boolean,
       default: true,
@@ -62,6 +106,13 @@ const settingsSchema = new mongoose.Schema({
     jobApplications: {
       type: Boolean,
       default: true,
+    },
+  },
+
+  leadForm: {
+    customFields: {
+      type: [leadFormFieldSchema],
+      default: [],
     },
   },
 });

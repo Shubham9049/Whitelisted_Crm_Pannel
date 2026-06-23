@@ -1,9 +1,19 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import type { LeadFormSettings } from "../types/leadForm";
+
+interface AppSettings {
+  branding?: {
+    companyName?: string;
+    logo?: string;
+  };
+  modules?: Record<string, boolean>;
+  leadForm?: LeadFormSettings;
+}
 
 interface SettingsContextType {
-  settings: any;
+  settings: AppSettings | null;
   loading: boolean;
   refreshSettings: () => Promise<void>;
 }
@@ -17,10 +27,10 @@ const SettingsContext = createContext<SettingsContextType>({
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
-  const [settings, setSettings] = useState(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/settings`, {
         cache: "no-store",
@@ -36,11 +46,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [fetchSettings]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <SettingsContext.Provider

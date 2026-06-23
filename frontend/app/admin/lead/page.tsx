@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { RxCrossCircled } from "react-icons/rx";
+import { useSettings } from "../../context/SettingsContext";
 
 type LeadStatus =
   | "new"
@@ -54,6 +55,7 @@ interface LeadRequest {
   phone: string;
   companyName?: string;
   products?: string[];
+  customFields?: Record<string, string | number | boolean>;
   message?: string;
   marked?: boolean;
   verified?: boolean;
@@ -82,6 +84,9 @@ const ITEMS_PER_PAGE = 20;
 
 export default function AdminLead() {
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
+  const { settings, loading: settingsLoading } = useSettings();
+  const showAssignment =
+    !settingsLoading && settings?.modules?.employees !== false;
 
   const [leads, setLeads] = useState<LeadRequest[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -98,10 +103,12 @@ export default function AdminLead() {
     try {
       const [leadRes, employeeRes] = await Promise.all([
         fetch(`${API_BASE}/lead`, { cache: "no-store" }),
-        fetch(`${API_BASE}/employee`, { cache: "no-store" }),
+        showAssignment
+          ? fetch(`${API_BASE}/employee`, { cache: "no-store" })
+          : Promise.resolve(null),
       ]);
       const leadData = await leadRes.json();
-      const employeeData = await employeeRes.json();
+      const employeeData = employeeRes ? await employeeRes.json() : null;
 
       setLeads(
         [...(Array.isArray(leadData) ? leadData : [])].sort(
@@ -109,7 +116,11 @@ export default function AdminLead() {
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         ),
       );
-      if (employeeData.success) setEmployees(employeeData.employees || []);
+      if (employeeData?.success) {
+        setEmployees(employeeData.data || employeeData.employees || []);
+      } else {
+        setEmployees([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -118,7 +129,7 @@ export default function AdminLead() {
   /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
   useEffect(() => {
     fetchData();
-  }, [API_BASE]);
+  }, [API_BASE, showAssignment]);
   /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const filteredLeads = useMemo(() => {
@@ -132,9 +143,14 @@ export default function AdminLead() {
         lead.email.toLowerCase().includes(query) ||
         lead.phone.includes(query) ||
         (lead.companyName || "").toLowerCase().includes(query) ||
-        (lead.assignedTo?.name || "").toLowerCase().includes(query);
+        Object.values(lead.customFields || {}).some((value) =>
+          String(value).toLowerCase().includes(query),
+        ) ||
+        (showAssignment &&
+          (lead.assignedTo?.name || "").toLowerCase().includes(query));
       const matchesStatus = statusFilter === "all" || status === statusFilter;
       const matchesAssignment =
+        !showAssignment ||
         assignmentFilter === "all" ||
         (assignmentFilter === "assigned"
           ? Boolean(lead.assignedTo)
@@ -142,18 +158,22 @@ export default function AdminLead() {
 
       return matchesSearch && matchesStatus && matchesAssignment;
     });
-  }, [assignmentFilter, leads, searchQuery, statusFilter]);
+  }, [assignmentFilter, leads, searchQuery, showAssignment, statusFilter]);
 
   const stats = useMemo(
     () => ({
       total: leads.length,
-      assigned: leads.filter((lead) => lead.assignedTo).length,
-      unassigned: leads.filter((lead) => !lead.assignedTo).length,
+      assigned: showAssignment
+        ? leads.filter((lead) => lead.assignedTo).length
+        : 0,
+      unassigned: showAssignment
+        ? leads.filter((lead) => !lead.assignedTo).length
+        : 0,
       followUps: leads.filter((lead) => lead.leadStatus === "follow-up").length,
       won: leads.filter((lead) => lead.leadStatus === "won").length,
       lost: leads.filter((lead) => lead.leadStatus === "lost").length,
     }),
-    [leads],
+    [leads, showAssignment],
   );
 
   const currentLeads = filteredLeads.slice(
@@ -162,7 +182,9 @@ export default function AdminLead() {
   );
   const totalPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE);
   const hasFilters =
-    searchQuery || statusFilter !== "all" || assignmentFilter !== "all";
+    searchQuery ||
+    statusFilter !== "all" ||
+    (showAssignment && assignmentFilter !== "all");
 
   const updateLeadInState = (leadId: string, patch: Partial<LeadRequest>) => {
     setLeads((prev) =>
@@ -206,14 +228,20 @@ export default function AdminLead() {
   };
 
   const handleExport = () => {
+    const customFieldKeys = Array.from(
+      new Set(
+        filteredLeads.flatMap((lead) => Object.keys(lead.customFields || {})),
+      ),
+    );
     const rows = [
       [
         "Name",
         "Email",
         "Phone",
         "Company",
+        ...customFieldKeys,
         "Status",
-        "Assigned To",
+        ...(showAssignment ? ["Assigned To"] : []),
         "Next Follow Up",
       ],
       ...filteredLeads.map((lead) => [
@@ -221,8 +249,9 @@ export default function AdminLead() {
         lead.email,
         lead.phone,
         lead.companyName || "",
+        ...customFieldKeys.map((key) => lead.customFields?.[key] ?? ""),
         lead.leadStatus || "new",
-        lead.assignedTo?.name || "Unassigned",
+        ...(showAssignment ? [lead.assignedTo?.name || "Unassigned"] : []),
         lead.followUpDate ? new Date(lead.followUpDate).toLocaleString() : "",
       ]),
     ];
@@ -288,18 +317,22 @@ export default function AdminLead() {
           icon={<Users size={18} />}
           tone="blue"
         />
-        <Stat
-          label="Assigned"
-          value={stats.assigned}
-          icon={<UserRoundCheck size={18} />}
-          tone="green"
-        />
-        <Stat
-          label="Unassigned"
-          value={stats.unassigned}
-          icon={<Filter size={18} />}
-          tone="amber"
-        />
+        {showAssignment && (
+          <>
+            <Stat
+              label="Assigned"
+              value={stats.assigned}
+              icon={<UserRoundCheck size={18} />}
+              tone="green"
+            />
+            <Stat
+              label="Unassigned"
+              value={stats.unassigned}
+              icon={<Filter size={18} />}
+              tone="amber"
+            />
+          </>
+        )}
         <Stat
           label="Follow Ups"
           value={stats.followUps}
@@ -321,7 +354,11 @@ export default function AdminLead() {
       </div>
 
       <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
-        <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr_1fr]">
+        <div
+          className={`grid gap-4 ${
+            showAssignment ? "lg:grid-cols-[1.5fr_1fr_1fr]" : "lg:grid-cols-[1.5fr_1fr]"
+          }`}
+        >
           <div className="relative">
             <Search
               size={17}
@@ -333,7 +370,11 @@ export default function AdminLead() {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Search name, company, phone, employee..."
+              placeholder={
+                showAssignment
+                  ? "Search name, company, phone, employee..."
+                  : "Search name, company, phone..."
+              }
               className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] pl-10 pr-4 outline-none focus:ring-2 focus:ring-[var(--primary)]"
             />
           </div>
@@ -344,11 +385,13 @@ export default function AdminLead() {
             }
             options={statusOptions}
           />
-          <Select
-            value={assignmentFilter}
-            onChange={setAssignmentFilter}
-            options={["all", "assigned", "unassigned"]}
-          />
+          {showAssignment && (
+            <Select
+              value={assignmentFilter}
+              onChange={setAssignmentFilter}
+              options={["all", "assigned", "unassigned"]}
+            />
+          )}
         </div>
       </div>
 
@@ -366,7 +409,7 @@ export default function AdminLead() {
                     "Lead",
                     "Contact",
                     "Status",
-                    "Assigned To",
+                    ...(showAssignment ? ["Assigned To"] : []),
                     "Next Follow Up",
                     "Actions",
                   ].map((head) => (
@@ -404,24 +447,26 @@ export default function AdminLead() {
                         {lead.leadStatus || "new"}
                       </span>
                     </td>
-                    <td className="px-5 py-4">
-                      <select
-                        value={lead.assignedTo?._id || ""}
-                        onChange={(e) =>
-                          handleAssignLead(lead._id, e.target.value)
-                        }
-                        className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] px-3 outline-none"
-                      >
-                        <option value="">Unassigned</option>
-                        {employees
-                          .filter((employee) => employee.active !== false)
-                          .map((employee) => (
-                            <option key={employee._id} value={employee._id}>
-                              {employee.name}
-                            </option>
-                          ))}
-                      </select>
-                    </td>
+                    {showAssignment && (
+                      <td className="px-5 py-4">
+                        <select
+                          value={lead.assignedTo?._id || ""}
+                          onChange={(e) =>
+                            handleAssignLead(lead._id, e.target.value)
+                          }
+                          className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] px-3 outline-none"
+                        >
+                          <option value="">Unassigned</option>
+                          {employees
+                            .filter((employee) => employee.active !== false)
+                            .map((employee) => (
+                              <option key={employee._id} value={employee._id}>
+                                {employee.name}
+                              </option>
+                            ))}
+                        </select>
+                      </td>
+                    )}
                     <td className="px-5 py-4 text-sm">
                       {lead.followUpDate ? (
                         <>
@@ -517,6 +562,7 @@ export default function AdminLead() {
         <LeadModal
           lead={selectedLead}
           employees={employees}
+          showAssignment={showAssignment}
           onClose={() => setSelectedLead(null)}
           onAssign={handleAssignLead}
           onMark={handleMark}
@@ -529,12 +575,14 @@ export default function AdminLead() {
 function LeadModal({
   lead,
   employees,
+  showAssignment,
   onClose,
   onAssign,
   onMark,
 }: {
   lead: LeadRequest;
   employees: Employee[];
+  showAssignment: boolean;
   onClose: () => void;
   onAssign: (leadId: string, employeeId: string) => void;
   onMark: (leadId: string, marked: boolean) => void;
@@ -574,6 +622,25 @@ function LeadModal({
               <p className="mt-5 whitespace-pre-wrap text-sm leading-6 text-[var(--text-secondary)]">
                 {lead.message || "No message provided."}
               </p>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--border)] p-5">
+              <h3 className="mb-4 font-semibold">Custom Fields</h3>
+              {lead.customFields && Object.keys(lead.customFields).length ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {Object.entries(lead.customFields).map(([key, value]) => (
+                    <Info
+                      key={key}
+                      label={formatCustomFieldLabel(key)}
+                      value={String(value || "-")}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--text-secondary)]">
+                  No custom fields captured.
+                </p>
+              )}
             </section>
 
             <section className="rounded-2xl border border-[var(--border)] p-5">
@@ -622,23 +689,25 @@ function LeadModal({
           </div>
 
           <aside className="space-y-5">
-            <section className="rounded-2xl border border-[var(--border)] p-5">
-              <h3 className="mb-4 font-semibold">Assignment</h3>
-              <select
-                value={lead.assignedTo?._id || ""}
-                onChange={(e) => onAssign(lead._id, e.target.value)}
-                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] px-3 outline-none"
-              >
-                <option value="">Unassigned</option>
-                {employees
-                  .filter((employee) => employee.active !== false)
-                  .map((employee) => (
-                    <option key={employee._id} value={employee._id}>
-                      {employee.name}
-                    </option>
-                  ))}
-              </select>
-            </section>
+            {showAssignment && (
+              <section className="rounded-2xl border border-[var(--border)] p-5">
+                <h3 className="mb-4 font-semibold">Assignment</h3>
+                <select
+                  value={lead.assignedTo?._id || ""}
+                  onChange={(e) => onAssign(lead._id, e.target.value)}
+                  className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] px-3 outline-none"
+                >
+                  <option value="">Unassigned</option>
+                  {employees
+                    .filter((employee) => employee.active !== false)
+                    .map((employee) => (
+                      <option key={employee._id} value={employee._id}>
+                        {employee.name}
+                      </option>
+                    ))}
+                </select>
+              </section>
+            )}
 
             <section className="rounded-2xl max-h-96 overflow-auto border border-[var(--border)] p-5">
               <h3 className="mb-4 font-semibold">Timeline</h3>
@@ -703,6 +772,12 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="mt-1 break-words font-medium">{value}</p>
     </div>
   );
+}
+
+function formatCustomFieldLabel(value: string) {
+  return value
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (char) => char.toUpperCase());
 }
 
 function Stat({

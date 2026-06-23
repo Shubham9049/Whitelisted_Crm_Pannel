@@ -30,7 +30,7 @@ const leadSchema = new mongoose.Schema(
     companyName: {
       type: String,
       trim: true,
-      required: [true, "Company name is required"],
+      default: "",
     },
 
     products: [
@@ -43,6 +43,12 @@ const leadSchema = new mongoose.Schema(
     message: {
       type: String,
       trim: true,
+    },
+
+    customFields: {
+      type: Map,
+      of: mongoose.Schema.Types.Mixed,
+      default: {},
     },
 
     // Lead Status

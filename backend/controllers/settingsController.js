@@ -1,15 +1,22 @@
 const Settings = require("../models/Settings");
+const { normalizeLeadFormFields } = require("../utils/leadFormConfig");
+
+const getOrCreateSettings = async () => {
+  let settings = await Settings.findOne();
+
+  if (!settings) {
+    settings = await Settings.create({});
+  }
+
+  return settings;
+};
 
 /* =====================================
    GET SETTINGS
 ===================================== */
 exports.getSettings = async (req, res) => {
   try {
-    let settings = await Settings.findOne();
-
-    if (!settings) {
-      settings = await Settings.create({});
-    }
+    const settings = await getOrCreateSettings();
 
     return res.status(200).json({
       success: true,
@@ -30,11 +37,7 @@ exports.getSettings = async (req, res) => {
 ===================================== */
 exports.updateBranding = async (req, res) => {
   try {
-    let settings = await Settings.findOne();
-
-    if (!settings) {
-      settings = await Settings.create({});
-    }
+    const settings = await getOrCreateSettings();
 
     if (req.body.companyName) {
       settings.branding.companyName = req.body.companyName;
@@ -66,11 +69,7 @@ exports.updateBranding = async (req, res) => {
 ===================================== */
 exports.updateModules = async (req, res) => {
   try {
-    let settings = await Settings.findOne();
-
-    if (!settings) {
-      settings = await Settings.create({});
-    }
+    const settings = await getOrCreateSettings();
 
     settings.modules = {
       ...settings.modules.toObject(),
@@ -90,6 +89,63 @@ exports.updateModules = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to update modules",
+    });
+  }
+};
+
+/* =====================================
+   GET LEAD FORM SETTINGS
+===================================== */
+exports.getLeadFormSettings = async (req, res) => {
+  try {
+    const settings = await getOrCreateSettings();
+
+    return res.status(200).json({
+      success: true,
+      data: settings.leadForm || { customFields: [] },
+    });
+  } catch (error) {
+    console.error("GET LEAD FORM SETTINGS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch lead form settings",
+    });
+  }
+};
+
+/* =====================================
+   UPDATE LEAD FORM SETTINGS
+===================================== */
+exports.updateLeadFormSettings = async (req, res) => {
+  try {
+    const settings = await getOrCreateSettings();
+    const result = normalizeLeadFormFields(req.body?.customFields);
+
+    if (!result.valid) {
+      return res.status(400).json({
+        success: false,
+        message: result.message,
+      });
+    }
+
+    settings.leadForm = {
+      customFields: result.fields,
+    };
+
+    await settings.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Lead form settings updated successfully",
+      data: settings.leadForm,
+    });
+  } catch (error) {
+    console.error("UPDATE LEAD FORM SETTINGS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update lead form settings",
     });
   }
 };

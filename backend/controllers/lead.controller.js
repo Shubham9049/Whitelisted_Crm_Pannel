@@ -1,6 +1,8 @@
 const Lead = require("../models/lead.model");
 const Employee = require("../models/employee.model");
+const Settings = require("../models/Settings");
 const sendEmail = require("../utils/sendEmail");
+const { normalizeLeadCustomFieldValues } = require("../utils/leadFormConfig");
 
 const otpStore = new Map(); // temporary in-memory storage
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -44,12 +46,12 @@ const decorateLead = (lead) => {
 =============================== */
 exports.sendOTP = async (req, res) => {
   try {
-    const { name, email, phone, companyName, products, message } = req.body;
+    const { name, email, phone, message } = req.body;
 
     // Basic validation
-    if (!name || !email || !phone) {
+    if (!name || !email || !phone || !message) {
       return res.status(400).json({
-        message: "Name, email and phone are required",
+        message: "Name, email, phone and message are required",
       });
     }
 
@@ -63,6 +65,20 @@ exports.sendOTP = async (req, res) => {
       });
     }
 
+    const settings = await Settings.findOne();
+    const customFieldConfig = settings?.leadForm?.customFields || [];
+    const customFieldsResult = normalizeLeadCustomFieldValues(
+      customFieldConfig,
+      req.body.customFields,
+    );
+
+    if (!customFieldsResult.valid) {
+      return res.status(400).json({
+        success: false,
+        message: customFieldsResult.message,
+      });
+    }
+
     // Generate 6 digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000);
 
@@ -73,9 +89,10 @@ exports.sendOTP = async (req, res) => {
         name,
         email,
         phone,
-        companyName,
-        products,
         message,
+        customFields: customFieldsResult.values,
+        companyName: customFieldsResult.values.companyName || req.body.companyName || "",
+        products: Array.isArray(req.body.products) ? req.body.products : [],
       },
       createdAt: Date.now(),
     });
@@ -173,7 +190,7 @@ exports.verifyOTP = async (req, res) => {
 
   <p><strong>Phone:</strong> ${record.data.phone}</p>
 
-  <p><strong>Company:</strong> ${record.data.companyName}</p>
+  <p><strong>Company:</strong> ${record.data.companyName || "-"}</p>
 
   <p>
     <strong>Products:</strong>
@@ -183,6 +200,17 @@ exports.verifyOTP = async (req, res) => {
         : record.data.products || "-"
     }
   </p>
+
+  ${
+    record.data.customFields && Object.keys(record.data.customFields).length
+      ? `<h3>Custom Fields</h3>${Object.entries(record.data.customFields)
+          .map(
+            ([key, value]) =>
+              `<p><strong>${key}:</strong> ${Array.isArray(value) ? value.join(", ") : value || "-"}</p>`,
+          )
+          .join("")}`
+      : ""
+  }
 
   <p>
     <strong>Message:</strong><br/>
