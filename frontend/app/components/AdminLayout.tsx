@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import Image from "next/image";
-
+import { useSettings } from "../context/SettingsContext";
 import {
   Briefcase,
   Building2,
@@ -15,6 +15,7 @@ import {
   LogOut,
   MonitorPlay,
   Newspaper,
+  Settings,
   User2,
   UserCog,
   Users,
@@ -34,70 +35,91 @@ export default function AdminLayout({
   const router = useRouter();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
+  const { settings, loading } = useSettings();
   const navItems = [
     {
+      key: "dashboard",
       icon: <Gauge size={18} />,
       label: "Dashboard",
       to: "/admin",
     },
     {
+      key: "leads",
       icon: <Users size={18} />,
       label: "Leads",
       to: "/admin/lead",
     },
     {
+      key: "siteVisits",
       icon: <MonitorPlay size={18} />,
       label: "Site Visits",
       to: "/admin/site-visit",
     },
     {
+      key: "subscribers",
       icon: <User2 size={18} />,
       label: "Subscribers",
       to: "/admin/subscribers",
     },
     {
+      key: "clients",
       icon: <Users2 size={18} />,
       label: "Clients",
       to: "/admin/clients",
     },
     {
+      key: "newsletter",
       icon: <FaMailBulk size={18} />,
       label: "Newsletter",
       to: "/admin/newsletter",
     },
     {
+      key: "blogs",
       icon: <Newspaper size={18} />,
       label: "Blogs",
       to: "/admin/blogs",
     },
     {
+      key: "agents",
       icon: <UserCog size={18} />,
       label: "Agents",
       to: "/admin/agents",
     },
     {
+      key: "vendors",
       icon: <Building2 size={18} />,
       label: "Vendors",
       to: "/admin/vendors",
     },
     {
+      key: "openings",
       icon: <Briefcase size={18} />,
       label: "Openings",
       to: "/admin/openings",
     },
     {
+      key: "jobApplications",
       icon: <FileCheck size={18} />,
       label: "Job Applications",
       to: "/admin/job-applications",
     },
     {
+      key: "employees",
       icon: <FaUserGraduate size={18} />,
       label: "Employees",
       to: "/admin/employee",
     },
   ];
 
+  const filteredNavItems = navItems.filter((item) => {
+    // Dashboard & Settings always visible
+    if (item.to === "/admin" || item.to === "/admin/settings") {
+      return true;
+    }
+
+    return settings?.modules?.[item.key];
+  });
+  const logoUrl = settings?.branding?.logo || "/hp-logo.png";
   const handleLogout = () => {
     Cookies.remove("adminAuth");
     router.push("/login");
@@ -110,7 +132,7 @@ export default function AdminLayout({
       <div className="lg:hidden text-[var(--text-primary)] flex items-center justify-between px-5 py-4 shadow-sm border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
           <Image
-            src="/hp-logo.png"
+            src={logoUrl}
             alt="logo"
             width={40}
             height={40}
@@ -161,7 +183,7 @@ export default function AdminLayout({
 
         {/* Nav */}
         <nav className="flex flex-col mt-6 px-3 gap-2">
-          {navItems.map(({ icon, label, to }) => (
+          {filteredNavItems.map(({ icon, label, to }) => (
             <Link
               key={to}
               href={to}
@@ -186,21 +208,43 @@ export default function AdminLayout({
 
         {/* Logout */}
         <div className="absolute bottom-5 left-0 w-full px-3">
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="
-              flex h-11 w-full items-center justify-center gap-2
-              rounded-xl border border-red-500/20
-              bg-red-500/5 px-4
-              text-sm font-medium text-red-500
-              transition-all
-              hover:border-red-500/30 hover:bg-red-500/10
-            "
-          >
-            <LogOut size={17} />
-            Logout
-          </button>
+          <div className="flex flex-col gap-2">
+            <Link
+              href="/admin/settings"
+              onClick={() => setMobileMenuOpen(false)}
+              className={`
+        flex h-11 items-center justify-center gap-2
+        rounded-xl border border-[var(--border)]
+        text-sm font-medium
+        transition-all
+        ${
+          pathname === "/admin/settings"
+            ? "bg-[var(--primary)] text-white"
+            : "hover:bg-[var(--bg-secondary)]"
+        }
+      `}
+            >
+              <Settings size={17} />
+              Settings
+            </Link>
+            ```
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="
+    flex h-11 w-full items-center justify-center gap-2
+    rounded-xl border border-red-500/20
+    bg-red-500/5 px-4
+    text-sm font-medium text-red-500
+    transition-all
+    hover:border-red-500/30 hover:bg-red-500/10
+  "
+            >
+              <LogOut size={17} />
+              Logout
+            </button>
+            ```
+          </div>
         </div>
       </div>
       {/* DESKTOP SIDEBAR */}
@@ -219,7 +263,7 @@ export default function AdminLayout({
         {/* Logo */}
         <div className="p-5 shrink-0">
           <Image
-            src="/hp-logo.png"
+            src={logoUrl}
             alt="logo"
             width={140}
             height={100}
@@ -230,7 +274,7 @@ export default function AdminLayout({
         {/* Scrollable Navigation */}
         <div className="flex-1 overflow-y-auto px-5 pb-5">
           <nav className="flex flex-col gap-2">
-            {navItems.map(({ icon, label, to }) => (
+            {filteredNavItems.map(({ icon, label, to }) => (
               <Link
                 key={to}
                 href={to}
@@ -255,21 +299,41 @@ export default function AdminLayout({
 
         {/* Fixed Logout */}
         <div className="p-5 border-t border-[var(--border)] shrink-0">
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="
-              flex h-11 w-full items-center justify-center gap-2
-              rounded-xl border border-red-500/20
-              bg-red-500/5 px-4
-              text-sm font-medium text-red-500
-              transition-all
-              hover:border-red-500/30 hover:bg-red-500/10
-            "
-          >
-            <LogOut size={17} />
-            Logout
-          </button>
+          <div className="flex flex-col gap-2">
+            <Link
+              href="/admin/settings"
+              className={`
+        flex h-11 items-center justify-center gap-2
+        rounded-xl border border-[var(--border)]
+        text-sm font-medium
+        transition-all
+        ${
+          pathname === "/admin/settings"
+            ? "bg-[var(--primary)] text-white"
+            : "hover:bg-[var(--muted)]"
+        }
+      `}
+            >
+              <Settings size={17} />
+              Settings
+            </Link>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="
+    flex h-11 w-full items-center justify-center gap-2
+    rounded-xl border border-red-500/20
+    bg-red-500/5 px-4
+    text-sm font-medium text-red-500
+    transition-all
+    hover:border-red-500/30 hover:bg-red-500/10
+  "
+            >
+              <LogOut size={17} />
+              Logout
+            </button>
+          </div>
         </div>
       </aside>
       {/* MAIN CONTENT */}
