@@ -206,7 +206,7 @@ exports.getEmployees = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      employees,
+      data: employees,
     });
   } catch (error) {
     console.error("Get Employees Error:", error);

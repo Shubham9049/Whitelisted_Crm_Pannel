@@ -289,7 +289,13 @@ function dateKey(date: Date) {
 }
 
 function getItemDate(item: DashboardItem) {
-  return item.createdAt || item.updatedAt || "";
+  return (
+    item.createdAt ||
+    item.updatedAt ||
+    (item as any).datePublished ||
+    (item as any).lastUpdated ||
+    ""
+  );
 }
 
 function countToday(items: DashboardItem[]) {
@@ -564,13 +570,6 @@ export default function Dashboard() {
       ) : (
         <>
           <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 md:gap-4">
-            <SummaryCard
-              title="Enabled Modules"
-              value={enabledModules.length}
-              subtitle={`${totalRecords} total records`}
-              icon={<Gauge size={19} />}
-              color="slate"
-            />
             {enabledModules.map((module) => (
               <StatCard
                 key={module.key}
@@ -741,7 +740,8 @@ export default function Dashboard() {
               </div>
 
               {recentActivity.length > 0 ? (
-                <div className="divide-y divide-[var(--border)]">
+                <div className="max-h-[600px] overflow-y-auto divide-y divide-[var(--border)] pr-2">
+                  {" "}
                   {recentActivity.map(({ item, module, date }, index) => (
                     <Link
                       key={`${module.key}-${item._id || item.id || index}`}
