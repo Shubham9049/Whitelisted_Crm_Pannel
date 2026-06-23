@@ -9,26 +9,42 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const daysSince = (date) => {
   if (!date) return null;
-  return Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / DAY_MS));
+  return Math.max(
+    0,
+    Math.floor((Date.now() - new Date(date).getTime()) / DAY_MS),
+  );
 };
 
 const getAgingTone = (lead) => {
   const leadAgeDays = daysSince(lead.createdAt) || 0;
-  const lastContactDays = daysSince(lead.lastActivityAt || lead.assignedAt || lead.createdAt) || 0;
+  const lastContactDays =
+    daysSince(lead.lastActivityAt || lead.assignedAt || lead.createdAt) || 0;
 
   if (lastContactDays >= 5 || leadAgeDays >= 15) return "red";
   if (lastContactDays >= 2 || leadAgeDays >= 7) return "yellow";
   return "green";
 };
 
-const decorateLead = (lead) => {
-  const plainLead = typeof lead.toObject === "function" ? lead.toObject() : lead;
-  const lastActivityAt = plainLead.lastActivityAt || plainLead.assignedAt || plainLead.createdAt;
+const areEmployeesEnabled = async () => {
+  const settings = await Settings.findOne();
+  return settings?.modules?.employees !== false;
+};
+
+const decorateLead = (lead, options = {}) => {
+  const includeEmployeeFields = options.includeEmployeeFields !== false;
+  const plainLead =
+    typeof lead.toObject === "function"
+      ? lead.toObject({
+          flattenMaps: true,
+        })
+      : lead;
+  const lastActivityAt =
+    plainLead.lastActivityAt || plainLead.assignedAt || plainLead.createdAt;
   const lastFollowUpActivity = [...(plainLead.activityLog || [])]
     .reverse()
     .find((item) => item.type === "follow-up");
 
-  return {
+  const decoratedLead = {
     ...plainLead,
     aging: {
       leadAgeDays: daysSince(plainLead.createdAt) || 0,
@@ -39,6 +55,20 @@ const decorateLead = (lead) => {
       tone: getAgingTone(plainLead),
     },
   };
+
+  if (!includeEmployeeFields) {
+    delete decoratedLead.assignedTo;
+    delete decoratedLead.assignedAt;
+    delete decoratedLead.lastActivityAt;
+    delete decoratedLead.leadStatus;
+    delete decoratedLead.followUpDate;
+    delete decoratedLead.followUpRemark;
+    delete decoratedLead.notes;
+    delete decoratedLead.activityLog;
+    delete decoratedLead.aging;
+  }
+
+  return decoratedLead;
 };
 
 /* ============================
@@ -91,8 +121,6 @@ exports.sendOTP = async (req, res) => {
         phone,
         message,
         customFields: customFieldsResult.values,
-        companyName: customFieldsResult.values.companyName || req.body.companyName || "",
-        products: Array.isArray(req.body.products) ? req.body.products : [],
       },
       createdAt: Date.now(),
     });
@@ -182,24 +210,13 @@ exports.verifyOTP = async (req, res) => {
       to: "chandangomia2812@gmail.com",
       subject: "New Lead - HPMC",
       html: `
-  <h2>New Product Inquiry</h2>
+  <h2>New Lead Inquiry</h2>
 
   <p><strong>Name:</strong> ${record.data.name}</p>
 
   <p><strong>Email:</strong> ${record.data.email}</p>
 
   <p><strong>Phone:</strong> ${record.data.phone}</p>
-
-  <p><strong>Company:</strong> ${record.data.companyName || "-"}</p>
-
-  <p>
-    <strong>Products:</strong>
-    ${
-      Array.isArray(record.data.products)
-        ? record.data.products.join(", ")
-        : record.data.products || "-"
-    }
-  </p>
 
   ${
     record.data.customFields && Object.keys(record.data.customFields).length
@@ -236,12 +253,20 @@ exports.verifyOTP = async (req, res) => {
 =============================== */
 exports.getAllLeads = async (req, res) => {
   try {
-    const leads = await Lead.find()
-      .populate("assignedTo", "name email")
-      .populate("notes.createdBy", "name email")
-      .populate("activityLog.employee", "name email")
-      .sort({ createdAt: -1 });
-    res.status(200).json(leads.map(decorateLead));
+    const includeEmployeeFields = await areEmployeesEnabled();
+    let query = Lead.find().sort({ createdAt: -1 });
+
+    if (includeEmployeeFields) {
+      query = query
+        .populate("assignedTo", "name email")
+        .populate("notes.createdBy", "name email")
+        .populate("activityLog.employee", "name email");
+    }
+
+    const leads = await query;
+    res
+      .status(200)
+      .json(leads.map((lead) => decorateLead(lead, { includeEmployeeFields })));
   } catch (err) {
     console.error("Error fetching leads:", err);
     res.status(500).json({ message: "Server error while fetching leads." });
@@ -250,8 +275,19 @@ exports.getAllLeads = async (req, res) => {
 
 exports.getAllLeadActivity = async (req, res) => {
   try {
+    const includeEmployeeFields = await areEmployeesEnabled();
+
+    if (!includeEmployeeFields) {
+      return res.status(200).json({
+        success: true,
+        activity: [],
+      });
+    }
+
     const leads = await Lead.find()
-      .select("name companyName phone email leadStatus assignedTo activityLog createdAt lastActivityAt")
+      .select(
+        "name phone email leadStatus assignedTo activityLog createdAt lastActivityAt",
+      )
       .populate("assignedTo", "name email")
       .populate("activityLog.employee", "name email")
       .sort({ lastActivityAt: -1, createdAt: -1 });
@@ -263,7 +299,6 @@ exports.getAllLeadActivity = async (req, res) => {
           lead: {
             _id: lead._id,
             name: lead.name,
-            companyName: lead.companyName,
             phone: lead.phone,
             email: lead.email,
             leadStatus: lead.leadStatus,
@@ -272,7 +307,10 @@ exports.getAllLeadActivity = async (req, res) => {
           },
         })),
       )
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )
       .slice(0, 100);
 
     res.status(200).json({
@@ -296,6 +334,8 @@ exports.markLead = async (req, res) => {
   const { marked } = req.body;
 
   try {
+    const includeEmployeeFields = await areEmployeesEnabled();
+
     if (typeof marked !== "boolean") {
       return res.status(400).json({
         message: "Marked value must be boolean",
@@ -319,7 +359,7 @@ exports.markLead = async (req, res) => {
 
     res.status(200).json({
       message: "Lead updated successfully.",
-      lead: decorateLead(lead),
+      lead: decorateLead(lead, { includeEmployeeFields }),
     });
   } catch (err) {
     console.error("Error updating lead:", err);
@@ -351,6 +391,15 @@ exports.deleteLead = async (req, res) => {
 
 exports.assignLead = async (req, res) => {
   try {
+    const includeEmployeeFields = await areEmployeesEnabled();
+
+    if (!includeEmployeeFields) {
+      return res.status(403).json({
+        success: false,
+        message: "Employee module is disabled. Lead assignment is unavailable.",
+      });
+    }
+
     const { leadId, employeeId } = req.body;
 
     if (!leadId) {

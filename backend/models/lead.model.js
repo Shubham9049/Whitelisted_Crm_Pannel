@@ -27,19 +27,6 @@ const leadSchema = new mongoose.Schema(
       lowercase: true,
     },
 
-    companyName: {
-      type: String,
-      trim: true,
-      default: "",
-    },
-
-    products: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-
     message: {
       type: String,
       trim: true,

@@ -218,7 +218,9 @@ export default function SettingsPage() {
   };
 
   const deleteField = (index: number) => {
-    setCustomFields((prev) => prev.filter((_, fieldIndex) => fieldIndex !== index));
+    setCustomFields((prev) =>
+      prev.filter((_, fieldIndex) => fieldIndex !== index),
+    );
     if (editingIndex === index) resetDraft();
   };
 
@@ -258,10 +260,26 @@ export default function SettingsPage() {
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-        <StatCard title="Total Modules" value={moduleList.length} icon={<LayoutGrid size={18} />} />
-        <StatCard title="Enabled" value={enabledModules} icon={<SettingsIcon size={18} />} />
-        <StatCard title="Disabled" value={disabledModules} icon={<SettingsIcon size={18} />} />
-        <StatCard title="Lead Fields" value={systemLeadFields.length + customFields.length} icon={<Edit3 size={18} />} />
+        <StatCard
+          title="Total Modules"
+          value={moduleList.length}
+          icon={<LayoutGrid size={18} />}
+        />
+        <StatCard
+          title="Enabled"
+          value={enabledModules}
+          icon={<SettingsIcon size={18} />}
+        />
+        <StatCard
+          title="Disabled"
+          value={disabledModules}
+          icon={<SettingsIcon size={18} />}
+        />
+        <StatCard
+          title="Lead Fields"
+          value={systemLeadFields.length + customFields.length}
+          icon={<Edit3 size={18} />}
+        />
       </div>
 
       <section className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
@@ -272,7 +290,9 @@ export default function SettingsPage() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <div>
-            <label className="mb-2 block text-sm font-medium">Company Name</label>
+            <label className="mb-2 block text-sm font-medium">
+              Company Name
+            </label>
             <input
               type="text"
               value={companyName}
@@ -282,7 +302,9 @@ export default function SettingsPage() {
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">Company Logo</label>
+            <label className="mb-2 block text-sm font-medium">
+              Company Logo
+            </label>
             <input
               type="file"
               accept="image/*"
@@ -476,7 +498,9 @@ export default function SettingsPage() {
               />
 
               <div>
-                <label className="mb-2 block text-sm font-medium">Field Type</label>
+                <label className="mb-2 block text-sm font-medium">
+                  Field Type
+                </label>
                 <select
                   value={draftField.type}
                   onChange={(e) =>

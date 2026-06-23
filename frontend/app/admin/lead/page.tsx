@@ -53,8 +53,6 @@ interface LeadRequest {
   name: string;
   email: string;
   phone: string;
-  companyName?: string;
-  products?: string[];
   customFields?: Record<string, string | number | boolean>;
   message?: string;
   marked?: boolean;
@@ -82,6 +80,16 @@ const statusOptions: Array<"all" | LeadStatus> = [
 
 const ITEMS_PER_PAGE = 20;
 
+const formatDateTime = (value?: string | null) =>
+  value ? new Date(value).toLocaleString() : "";
+
+const formatFieldValue = (value: unknown) => {
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "-";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value === undefined || value === null || value === "") return "-";
+  return String(value);
+};
+
 export default function AdminLead() {
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
   const { settings, loading: settingsLoading } = useSettings();
@@ -97,6 +105,15 @@ export default function AdminLead() {
     useState<(typeof statusOptions)[number]>("all");
   const [assignmentFilter, setAssignmentFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!showAssignment) {
+      setStatusFilter("all");
+      setAssignmentFilter("all");
+    }
+  }, [showAssignment]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const fetchData = async () => {
     setLoading(true);
@@ -142,7 +159,6 @@ export default function AdminLead() {
         lead.name.toLowerCase().includes(query) ||
         lead.email.toLowerCase().includes(query) ||
         lead.phone.includes(query) ||
-        (lead.companyName || "").toLowerCase().includes(query) ||
         Object.values(lead.customFields || {}).some((value) =>
           String(value).toLowerCase().includes(query),
         ) ||
@@ -172,6 +188,9 @@ export default function AdminLead() {
       followUps: leads.filter((lead) => lead.leadStatus === "follow-up").length,
       won: leads.filter((lead) => lead.leadStatus === "won").length,
       lost: leads.filter((lead) => lead.leadStatus === "lost").length,
+      verified: leads.filter((lead) => lead.verified).length,
+      pending: leads.filter((lead) => !lead.marked).length,
+      completed: leads.filter((lead) => lead.marked).length,
     }),
     [leads, showAssignment],
   );
@@ -209,16 +228,6 @@ export default function AdminLead() {
     updateLeadInState(leadId, data.lead);
   };
 
-  const handleMark = async (id: string, marked: boolean) => {
-    const res = await fetch(`${API_BASE}/lead/${id}/mark`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ marked }),
-    });
-    const data = await res.json();
-    if (data.lead) updateLeadInState(id, data.lead);
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this lead?")) return;
     const res = await fetch(`${API_BASE}/lead/${id}`, { method: "DELETE" });
@@ -240,19 +249,26 @@ export default function AdminLead() {
         "Phone",
         "Company",
         ...customFieldKeys,
-        "Status",
-        ...(showAssignment ? ["Assigned To"] : []),
-        "Next Follow Up",
+        ...(showAssignment
+          ? ["Status", "Assigned To", "Next Follow Up"]
+          : ["Verified", "Completed", "Submitted At"]),
       ],
       ...filteredLeads.map((lead) => [
         lead.name,
         lead.email,
         lead.phone,
-        lead.companyName || "",
         ...customFieldKeys.map((key) => lead.customFields?.[key] ?? ""),
-        lead.leadStatus || "new",
-        ...(showAssignment ? [lead.assignedTo?.name || "Unassigned"] : []),
-        lead.followUpDate ? new Date(lead.followUpDate).toLocaleString() : "",
+        ...(showAssignment
+          ? [
+              lead.leadStatus || "new",
+              lead.assignedTo?.name || "Unassigned",
+              formatDateTime(lead.followUpDate),
+            ]
+          : [
+              lead.verified ? "Yes" : "No",
+              lead.marked ? "Yes" : "No",
+              formatDateTime(lead.createdAt),
+            ]),
       ]),
     ];
     const csv = rows
@@ -288,8 +304,9 @@ export default function AdminLead() {
             Lead CRM
           </h1>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Assign inquiries, monitor employee follow-ups, and keep the sales
-            pipeline moving.
+            {showAssignment
+              ? "Assign inquiries, monitor employee follow-ups, and keep the sales pipeline moving."
+              : "Review incoming inquiries and manage lead intake records."}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -310,7 +327,11 @@ export default function AdminLead() {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div
+        className={`mb-6 grid grid-cols-2 gap-3 ${
+          showAssignment ? "lg:grid-cols-6" : "lg:grid-cols-4"
+        }`}
+      >
         <Stat
           label="Total"
           value={stats.total}
@@ -333,30 +354,55 @@ export default function AdminLead() {
             />
           </>
         )}
-        <Stat
-          label="Follow Ups"
-          value={stats.followUps}
-          icon={<CalendarClock size={18} />}
-          tone="violet"
-        />
-        <Stat
-          label="Won"
-          value={stats.won}
-          icon={<CheckCircle2 size={18} />}
-          tone="emerald"
-        />
-        <Stat
-          label="Lost"
-          value={stats.lost}
-          icon={<RxCrossCircled size={18} />}
-          tone="rose"
-        />
+        {showAssignment ? (
+          <>
+            <Stat
+              label="Follow Ups"
+              value={stats.followUps}
+              icon={<CalendarClock size={18} />}
+              tone="violet"
+            />
+            <Stat
+              label="Won"
+              value={stats.won}
+              icon={<CheckCircle2 size={18} />}
+              tone="emerald"
+            />
+            <Stat
+              label="Lost"
+              value={stats.lost}
+              icon={<RxCrossCircled size={18} />}
+              tone="rose"
+            />
+          </>
+        ) : (
+          <>
+            <Stat
+              label="Verified"
+              value={stats.verified}
+              icon={<CheckCircle2 size={18} />}
+              tone="emerald"
+            />
+            <Stat
+              label="Pending"
+              value={stats.pending}
+              icon={<Filter size={18} />}
+              tone="amber"
+            />
+            <Stat
+              label="Completed"
+              value={stats.completed}
+              icon={<CheckCircle2 size={18} />}
+              tone="green"
+            />
+          </>
+        )}
       </div>
 
       <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
         <div
           className={`grid gap-4 ${
-            showAssignment ? "lg:grid-cols-[1.5fr_1fr_1fr]" : "lg:grid-cols-[1.5fr_1fr]"
+            showAssignment ? "lg:grid-cols-[1.5fr_1fr_1fr]" : "lg:grid-cols-1"
           }`}
         >
           <div className="relative">
@@ -378,13 +424,15 @@ export default function AdminLead() {
               className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] pl-10 pr-4 outline-none focus:ring-2 focus:ring-[var(--primary)]"
             />
           </div>
-          <Select
-            value={statusFilter}
-            onChange={(value) =>
-              setStatusFilter(value as (typeof statusOptions)[number])
-            }
-            options={statusOptions}
-          />
+          {showAssignment && (
+            <Select
+              value={statusFilter}
+              onChange={(value) =>
+                setStatusFilter(value as (typeof statusOptions)[number])
+              }
+              options={statusOptions}
+            />
+          )}
           {showAssignment && (
             <Select
               value={assignmentFilter}
@@ -408,9 +456,9 @@ export default function AdminLead() {
                   {[
                     "Lead",
                     "Contact",
-                    "Status",
-                    ...(showAssignment ? ["Assigned To"] : []),
-                    "Next Follow Up",
+                    ...(showAssignment
+                      ? ["Status", "Assigned To", "Next Follow Up"]
+                      : ["Submitted"]),
                     "Actions",
                   ].map((head) => (
                     <th
@@ -430,9 +478,6 @@ export default function AdminLead() {
                   >
                     <td className="px-5 py-4">
                       <p className="font-semibold">{lead.name}</p>
-                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                        {lead.companyName || "No company"}
-                      </p>
                     </td>
                     <td className="px-5 py-4 text-sm">
                       <p>{lead.phone}</p>
@@ -440,47 +485,70 @@ export default function AdminLead() {
                         {lead.email}
                       </p>
                     </td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(lead.leadStatus || "new")}`}
-                      >
-                        {lead.leadStatus || "new"}
-                      </span>
-                    </td>
                     {showAssignment && (
+                      <>
+                        <td className="px-5 py-4">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(lead.leadStatus || "new")}`}
+                          >
+                            {lead.leadStatus || "new"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <select
+                            value={lead.assignedTo?._id || ""}
+                            onChange={(e) =>
+                              handleAssignLead(lead._id, e.target.value)
+                            }
+                            className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] px-3 outline-none"
+                          >
+                            <option value="">Unassigned</option>
+                            {employees
+                              .filter((employee) => employee.active !== false)
+                              .map((employee) => (
+                                <option key={employee._id} value={employee._id}>
+                                  {employee.name}
+                                </option>
+                              ))}
+                          </select>
+                        </td>
+                      </>
+                    )}
+                    {!showAssignment && (
                       <td className="px-5 py-4">
-                        <select
-                          value={lead.assignedTo?._id || ""}
-                          onChange={(e) =>
-                            handleAssignLead(lead._id, e.target.value)
-                          }
-                          className="h-10 w-full rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] px-3 outline-none"
-                        >
-                          <option value="">Unassigned</option>
-                          {employees
-                            .filter((employee) => employee.active !== false)
-                            .map((employee) => (
-                              <option key={employee._id} value={employee._id}>
-                                {employee.name}
-                              </option>
-                            ))}
-                        </select>
+                        <p className="text-sm">
+                          {formatDateTime(lead.createdAt)}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {lead.verified && (
+                            <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-600">
+                              Verified
+                            </span>
+                          )}
+                          {lead.marked && (
+                            <span className="rounded-full bg-green-500/10 px-2 py-1 text-xs font-semibold text-green-600">
+                              Completed
+                            </span>
+                          )}
+                        </div>
                       </td>
                     )}
-                    <td className="px-5 py-4 text-sm">
-                      {lead.followUpDate ? (
-                        <>
-                          <p>{new Date(lead.followUpDate).toLocaleString()}</p>
-                          <p className="mt-1 max-w-[220px] truncate text-[var(--text-secondary)]">
-                            {lead.followUpRemark}
-                          </p>
-                        </>
-                      ) : (
-                        <span className="text-[var(--text-secondary)]">
-                          Not scheduled
-                        </span>
-                      )}
-                    </td>
+                    {showAssignment && (
+                      <td className="px-5 py-4 text-sm">
+                        {lead.followUpDate ? (
+                          <>
+                            <p>{formatDateTime(lead.followUpDate)}</p>
+                            <p className="mt-1 max-w-[220px] truncate text-[var(--text-secondary)]">
+                              {lead.followUpRemark}
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-[var(--text-secondary)]">
+                            Not scheduled
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-2">
                         <a
@@ -565,7 +633,6 @@ export default function AdminLead() {
           showAssignment={showAssignment}
           onClose={() => setSelectedLead(null)}
           onAssign={handleAssignLead}
-          onMark={handleMark}
         />
       )}
     </div>
@@ -578,14 +645,12 @@ function LeadModal({
   showAssignment,
   onClose,
   onAssign,
-  onMark,
 }: {
   lead: LeadRequest;
   employees: Employee[];
   showAssignment: boolean;
   onClose: () => void;
   onAssign: (leadId: string, employeeId: string) => void;
-  onMark: (leadId: string, marked: boolean) => void;
 }) {
   const timeline = [...(lead.activityLog || [])].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -609,15 +674,35 @@ function LeadModal({
           </button>
         </div>
 
-        <div className="grid gap-6 overflow-y-auto p-6 lg:grid-cols-[1fr_0.9fr]">
+        <div
+          className={`grid gap-6 overflow-y-auto p-6 ${
+            showAssignment ? "lg:grid-cols-[1fr_0.9fr]" : "lg:grid-cols-1"
+          }`}
+        >
           <div className="space-y-5">
             <section className="rounded-2xl border border-[var(--border)] p-5">
               <h3 className="mb-4 font-semibold">Customer</h3>
               <div className="grid gap-4 md:grid-cols-2">
-                <Info label="Company" value={lead.companyName || "-"} />
+                <Info label="Name" value={lead.name} />
+
                 <Info label="Email" value={lead.email} />
                 <Info label="Phone" value={lead.phone} />
                 <Info label="Source" value={lead.source || "Website"} />
+                <Info label="Verified" value={lead.verified ? "Yes" : "No"} />
+                <Info label="Completed" value={lead.marked ? "Yes" : "No"} />
+                <Info
+                  label="Submitted"
+                  value={formatDateTime(lead.createdAt)}
+                />
+                {showAssignment && (
+                  <>
+                    <Info label="Status" value={lead.leadStatus || "new"} />
+                    <Info
+                      label="Next Follow Up"
+                      value={formatDateTime(lead.followUpDate) || "-"}
+                    />
+                  </>
+                )}
               </div>
               <p className="mt-5 whitespace-pre-wrap text-sm leading-6 text-[var(--text-secondary)]">
                 {lead.message || "No message provided."}
@@ -632,7 +717,7 @@ function LeadModal({
                     <Info
                       key={key}
                       label={formatCustomFieldLabel(key)}
-                      value={String(value || "-")}
+                      value={formatFieldValue(value)}
                     />
                   ))}
                 </div>
@@ -643,53 +728,35 @@ function LeadModal({
               )}
             </section>
 
-            <section className="rounded-2xl border border-[var(--border)] p-5">
-              <h3 className="mb-4 font-semibold">Products</h3>
-              <div className="flex flex-wrap gap-2">
-                {lead.products?.length ? (
-                  lead.products.map((product) => (
-                    <span
-                      key={product}
-                      className="rounded-full bg-[var(--primary)]/10 px-3 py-1 text-sm text-[var(--primary)]"
-                    >
-                      {product}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-sm text-[var(--text-secondary)]">
-                    No product selected.
-                  </span>
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-[var(--border)] p-5">
-              <h3 className="mb-4 font-semibold">Employee Notes</h3>
-              <div className="space-y-3">
-                {lead.notes?.length ? (
-                  lead.notes.map((note, index) => (
-                    <div
-                      key={`${note.createdAt}-${index}`}
-                      className="rounded-xl bg-[var(--background-secondary)] p-4"
-                    >
-                      <p className="text-sm">{note.text}</p>
-                      <p className="mt-2 text-xs text-[var(--text-secondary)]">
-                        {note.createdBy?.name || "Employee"} -{" "}
-                        {new Date(note.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    No notes yet.
-                  </p>
-                )}
-              </div>
-            </section>
+            {showAssignment && (
+              <section className="rounded-2xl border border-[var(--border)] p-5">
+                <h3 className="mb-4 font-semibold">Employee Notes</h3>
+                <div className="space-y-3">
+                  {lead.notes?.length ? (
+                    lead.notes.map((note, index) => (
+                      <div
+                        key={`${note.createdAt}-${index}`}
+                        className="rounded-xl bg-[var(--background-secondary)] p-4"
+                      >
+                        <p className="text-sm">{note.text}</p>
+                        <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                          {note.createdBy?.name || "Employee"} -{" "}
+                          {formatDateTime(note.createdAt)}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      No notes yet.
+                    </p>
+                  )}
+                </div>
+              </section>
+            )}
           </div>
 
-          <aside className="space-y-5">
-            {showAssignment && (
+          {showAssignment && (
+            <aside className="space-y-5">
               <section className="rounded-2xl border border-[var(--border)] p-5">
                 <h3 className="mb-4 font-semibold">Assignment</h3>
                 <select
@@ -707,32 +774,32 @@ function LeadModal({
                     ))}
                 </select>
               </section>
-            )}
 
-            <section className="rounded-2xl max-h-96 overflow-auto border border-[var(--border)] p-5">
-              <h3 className="mb-4 font-semibold">Timeline</h3>
-              <div className="space-y-4">
-                {timeline.length ? (
-                  timeline.map((item, index) => (
-                    <div
-                      key={`${item.createdAt}-${index}`}
-                      className="border-l-2 border-[var(--primary)]/40 pl-4"
-                    >
-                      <p className="text-sm font-medium">{item.message}</p>
-                      <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {item.employee?.name || "Admin"} -{" "}
-                        {new Date(item.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    No timeline recorded.
-                  </p>
-                )}
-              </div>
-            </section>
-          </aside>
+              <section className="rounded-2xl max-h-96 overflow-auto border border-[var(--border)] p-5">
+                <h3 className="mb-4 font-semibold">Timeline</h3>
+                <div className="space-y-4">
+                  {timeline.length ? (
+                    timeline.map((item, index) => (
+                      <div
+                        key={`${item.createdAt}-${index}`}
+                        className="border-l-2 border-[var(--primary)]/40 pl-4"
+                      >
+                        <p className="text-sm font-medium">{item.message}</p>
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                          {item.employee?.name || "Admin"} -{" "}
+                          {formatDateTime(item.createdAt)}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      No timeline recorded.
+                    </p>
+                  )}
+                </div>
+              </section>
+            </aside>
+          )}
         </div>
       </div>
     </div>
