@@ -2,80 +2,232 @@
 
 import {
   ArrowRight,
+  Briefcase,
   BriefcaseBusiness,
+  Building2,
   CalendarDays,
   CheckCircle2,
   Clock3,
+  FileCheck,
+  Gauge,
   Mail,
-  MapPinned,
+  MonitorPlay,
+  Newspaper,
   RefreshCw,
   ShieldCheck,
   TrendingUp,
   UserRoundCheck,
   Users,
+  Users2,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { useSettings } from "../context/SettingsContext";
 
-interface Lead {
-  _id: string;
-  name: string;
-  email: string;
-  phone: string;
+type ModuleKey =
+  | "leads"
+  | "siteVisits"
+  | "subscribers"
+  | "clients"
+  | "newsletter"
+  | "blogs"
+  | "agents"
+  | "vendors"
+  | "openings"
+  | "jobApplications"
+  | "employees";
+
+type ModuleColor =
+  | "blue"
+  | "violet"
+  | "green"
+  | "orange"
+  | "red"
+  | "cyan"
+  | "slate"
+  | "pink"
+  | "amber"
+  | "emerald"
+  | "indigo";
+
+interface DashboardItem {
+  _id?: string;
+  id?: string;
+  name?: string;
+  title?: string;
+  subject?: string;
+  email?: string;
+  phone?: string;
   companyName?: string;
   products?: string[];
   marked?: boolean;
   verified?: boolean;
-  createdAt: string;
+  isActive?: boolean;
+  status?: string;
+  careerId?: { title?: string };
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
 }
 
-interface DashboardData {
-  leads: Lead[];
-  clients: number;
-  subscribers: number;
-  siteVisits: number;
-  agents: number;
-  vendors: number;
+type DashboardCollections = Record<ModuleKey, DashboardItem[]>;
+
+interface ModuleConfig {
+  key: ModuleKey;
+  label: string;
+  singular: string;
+  endpoint: string;
+  href: string;
+  icon: ReactNode;
+  color: ModuleColor;
+  subtitle: (items: DashboardItem[]) => string;
 }
 
-const EMPTY_DATA: DashboardData = {
+const EMPTY_COLLECTIONS: DashboardCollections = {
   leads: [],
-  clients: 0,
-  subscribers: 0,
-  siteVisits: 0,
-  agents: 0,
-  vendors: 0,
+  siteVisits: [],
+  subscribers: [],
+  clients: [],
+  newsletter: [],
+  blogs: [],
+  agents: [],
+  vendors: [],
+  openings: [],
+  jobApplications: [],
+  employees: [],
 };
 
-function getCollection(payload: unknown): unknown[] {
-  if (Array.isArray(payload)) return payload;
+const MODULES: ModuleConfig[] = [
+  {
+    key: "leads",
+    label: "Leads",
+    singular: "Lead",
+    endpoint: "lead",
+    href: "/admin/lead",
+    icon: <Users size={19} />,
+    color: "blue",
+    subtitle: (items) => `${countToday(items)} today`,
+  },
+  {
+    key: "siteVisits",
+    label: "Site Visits",
+    singular: "Site Visit",
+    endpoint: "sitevisit",
+    href: "/admin/site-visit",
+    icon: <MonitorPlay size={19} />,
+    color: "violet",
+    subtitle: (items) => `${countByStatus(items, "pending")} pending`,
+  },
+  {
+    key: "subscribers",
+    label: "Subscribers",
+    singular: "Subscriber",
+    endpoint: "subscribers",
+    href: "/admin/subscribers",
+    icon: <Mail size={19} />,
+    color: "green",
+    subtitle: (items) =>
+      `${items.filter((item) => item.isActive).length} active`,
+  },
+  {
+    key: "clients",
+    label: "Clients",
+    singular: "Client",
+    endpoint: "client",
+    href: "/admin/clients",
+    icon: <Users2 size={19} />,
+    color: "cyan",
+    subtitle: () => "Published profiles",
+  },
+  {
+    key: "newsletter",
+    label: "Newsletters",
+    singular: "Newsletter",
+    endpoint: "newsletter",
+    href: "/admin/newsletter",
+    icon: <Mail size={19} />,
+    color: "slate",
+    subtitle: (items) => `${countThisMonth(items)} this month`,
+  },
+  {
+    key: "blogs",
+    label: "Blogs",
+    singular: "Blog",
+    endpoint: "blog/viewblog",
+    href: "/admin/blogs",
+    icon: <Newspaper size={19} />,
+    color: "pink",
+    subtitle: (items) => `${countThisMonth(items)} this month`,
+  },
+  {
+    key: "agents",
+    label: "Agents",
+    singular: "Agent",
+    endpoint: "agent",
+    href: "/admin/agents",
+    icon: <BriefcaseBusiness size={19} />,
+    color: "orange",
+    subtitle: (items) => `${countByStatus(items, "pending")} pending`,
+  },
+  {
+    key: "vendors",
+    label: "Vendors",
+    singular: "Vendor",
+    endpoint: "vendor",
+    href: "/admin/vendors",
+    icon: <Building2 size={19} />,
+    color: "red",
+    subtitle: (items) => `${countByStatus(items, "pending")} pending`,
+  },
+  {
+    key: "openings",
+    label: "Job Openings",
+    singular: "Opening",
+    endpoint: "career",
+    href: "/admin/openings",
+    icon: <Briefcase size={19} />,
+    color: "amber",
+    subtitle: (items) =>
+      `${items.filter((item) => item.isActive).length} active`,
+  },
+  {
+    key: "jobApplications",
+    label: "Job Applications",
+    singular: "Application",
+    endpoint: "job-application",
+    href: "/admin/job-applications",
+    icon: <FileCheck size={19} />,
+    color: "indigo",
+    subtitle: (items) => `${countByStatus(items, "new")} new`,
+  },
+  {
+    key: "employees",
+    label: "Employees",
+    singular: "Employee",
+    endpoint: "employee",
+    href: "/admin/employee",
+    icon: <UserRoundCheck size={19} />,
+    color: "emerald",
+    subtitle: (items) =>
+      `${items.filter((item) => item.isActive !== false).length} active`,
+  },
+];
 
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in payload &&
-    Array.isArray(payload.data)
-  ) {
-    return payload.data;
+function getCollection(payload: unknown): DashboardItem[] {
+  if (Array.isArray(payload)) return payload as DashboardItem[];
+
+  if (payload && typeof payload === "object" && "data" in payload) {
+    const data = (payload as { data?: unknown }).data;
+    if (Array.isArray(data)) return data as DashboardItem[];
   }
 
   return [];
-}
-
-function getCount(payload: unknown) {
-  if (Array.isArray(payload)) return payload.length;
-
-  if (payload && typeof payload === "object") {
-    if ("count" in payload && typeof payload.count === "number") {
-      return payload.count;
-    }
-
-    if ("data" in payload && Array.isArray(payload.data)) {
-      return payload.data.length;
-    }
-  }
-
-  return 0;
 }
 
 async function fetchJson(url: string) {
@@ -85,7 +237,7 @@ async function fetchJson(url: string) {
   if (!response.ok) {
     const message =
       payload && typeof payload === "object" && "message" in payload
-        ? String(payload.message)
+        ? String((payload as { message: unknown }).message)
         : "Failed to load dashboard data";
     throw new Error(message);
   }
@@ -93,43 +245,39 @@ async function fetchJson(url: string) {
   return payload;
 }
 
-async function requestDashboard(apiBase: string | undefined) {
-  const endpoints = [
-    "lead",
-    "client",
-    "subscribers",
-    "sitevisit",
-    "agent",
-    "vendor",
-  ] as const;
+async function requestDashboard(
+  apiBase: string | undefined,
+  modules: ModuleConfig[],
+) {
+  if (!apiBase) {
+    throw new Error("NEXT_PUBLIC_API_BASE is not configured");
+  }
+
+  if (modules.length === 0) {
+    return { data: EMPTY_COLLECTIONS, hasPartialFailure: false };
+  }
 
   const results = await Promise.allSettled(
-    endpoints.map((endpoint) => fetchJson(`${apiBase}/${endpoint}`)),
+    modules.map((module) => fetchJson(`${apiBase}/${module.endpoint}`)),
   );
 
-  const successfulRequests = results.filter(
-    (result) => result.status === "fulfilled",
-  ).length;
+  const data = { ...EMPTY_COLLECTIONS };
+  let successfulRequests = 0;
+
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      successfulRequests += 1;
+      data[modules[index].key] = getCollection(result.value);
+    }
+  });
 
   if (successfulRequests === 0) {
     throw new Error("Unable to connect to the dashboard services");
   }
 
-  const valueAt = (index: number) => {
-    const result = results[index];
-    return result.status === "fulfilled" ? result.value : null;
-  };
-
   return {
-    data: {
-      leads: getCollection(valueAt(0)) as Lead[],
-      clients: getCount(valueAt(1)),
-      subscribers: getCount(valueAt(2)),
-      siteVisits: getCount(valueAt(3)),
-      agents: getCount(valueAt(4)),
-      vendors: getCount(valueAt(5)),
-    },
-    hasPartialFailure: successfulRequests < endpoints.length,
+    data,
+    hasPartialFailure: successfulRequests < modules.length,
   };
 }
 
@@ -140,8 +288,64 @@ function dateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function getItemDate(item: DashboardItem) {
+  return item.createdAt || item.updatedAt || "";
+}
+
+function countToday(items: DashboardItem[]) {
+  const today = dateKey(new Date());
+  return items.filter((item) => {
+    const date = getItemDate(item);
+    return date ? dateKey(new Date(date)) === today : false;
+  }).length;
+}
+
+function countThisMonth(items: DashboardItem[]) {
+  const now = new Date();
+  return items.filter((item) => {
+    const date = getItemDate(item);
+    if (!date) return false;
+    const itemDate = new Date(date);
+    return (
+      itemDate.getMonth() === now.getMonth() &&
+      itemDate.getFullYear() === now.getFullYear()
+    );
+  }).length;
+}
+
+function countByStatus(items: DashboardItem[], status: string) {
+  return items.filter(
+    (item) => String(item.status || "").toLowerCase() === status,
+  ).length;
+}
+
+function getItemTitle(item: DashboardItem, fallback: string) {
+  return (
+    item.name ||
+    item.title ||
+    item.subject ||
+    item.email ||
+    item.companyName ||
+    item.careerId?.title ||
+    fallback
+  );
+}
+
+function getItemDetail(item: DashboardItem) {
+  return (
+    item.companyName ||
+    item.email ||
+    item.phone ||
+    item.careerId?.title ||
+    item.status ||
+    "Recently added"
+  );
+}
+
 export default function Dashboard() {
-  const [dashboard, setDashboard] = useState<DashboardData>(EMPTY_DATA);
+  const { settings, loading: settingsLoading } = useSettings();
+  const [dashboard, setDashboard] =
+    useState<DashboardCollections>(EMPTY_COLLECTIONS);
   const [chartDays, setChartDays] = useState<7 | 30>(7);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,74 +354,80 @@ export default function Dashboard() {
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
 
+  const enabledModules = useMemo(() => {
+    const moduleSettings = settings?.modules as
+      | Partial<Record<ModuleKey, boolean>>
+      | undefined;
+
+    if (!moduleSettings) return MODULES;
+    return MODULES.filter((module) => Boolean(moduleSettings[module.key]));
+  }, [settings]);
+
+  const loadDashboard = useCallback(
+    async (showRefreshing = false) => {
+      try {
+        if (showRefreshing) setRefreshing(true);
+        setError("");
+
+        const { data, hasPartialFailure } = await requestDashboard(
+          API_BASE,
+          enabledModules,
+        );
+        setDashboard(data);
+        setPartialWarning(hasPartialFailure);
+      } catch (err) {
+        setDashboard(EMPTY_COLLECTIONS);
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [API_BASE, enabledModules],
+  );
+
   useEffect(() => {
-    let cancelled = false;
+    if (settingsLoading) return;
 
-    requestDashboard(API_BASE)
-      .then(({ data, hasPartialFailure }) => {
-        if (!cancelled) {
-          setDashboard(data);
-          setPartialWarning(hasPartialFailure);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Something went wrong");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    const timer = window.setTimeout(() => {
+      void loadDashboard();
+    }, 0);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [API_BASE]);
+    return () => window.clearTimeout(timer);
+  }, [loadDashboard, settingsLoading]);
 
-  const refreshDashboard = async () => {
-    try {
-      setRefreshing(true);
-      setError("");
-      const { data, hasPartialFailure } = await requestDashboard(API_BASE);
-      setDashboard(data);
-      setPartialWarning(hasPartialFailure);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setRefreshing(false);
-      setLoading(false);
-    }
-  };
+  const totalRecords = useMemo(
+    () =>
+      enabledModules.reduce(
+        (sum, module) => sum + dashboard[module.key].length,
+        0,
+      ),
+    [dashboard, enabledModules],
+  );
 
   const leadStats = useMemo(() => {
-    const now = new Date();
-    const today = dateKey(now);
-    const month = now.getMonth();
-    const year = now.getFullYear();
+    const leads = dashboard.leads;
 
     return {
-      total: dashboard.leads.length,
-      pending: dashboard.leads.filter((lead) => !lead.marked).length,
-      completed: dashboard.leads.filter((lead) => lead.marked).length,
-      verified: dashboard.leads.filter((lead) => lead.verified).length,
-      today: dashboard.leads.filter(
-        (lead) => dateKey(new Date(lead.createdAt)) === today,
-      ).length,
-      thisMonth: dashboard.leads.filter((lead) => {
-        const createdAt = new Date(lead.createdAt);
-        return (
-          createdAt.getMonth() === month && createdAt.getFullYear() === year
-        );
-      }).length,
+      total: leads.length,
+      pending: leads.filter((lead) => !lead.marked).length,
+      completed: leads.filter((lead) => lead.marked).length,
+      verified: leads.filter((lead) => lead.verified).length,
+      today: countToday(leads),
+      thisMonth: countThisMonth(leads),
     };
   }, [dashboard.leads]);
 
   const chartData = useMemo(() => {
     const counts = new Map<string, number>();
 
-    dashboard.leads.forEach((lead) => {
-      const key = dateKey(new Date(lead.createdAt));
-      counts.set(key, (counts.get(key) || 0) + 1);
+    enabledModules.forEach((module) => {
+      dashboard[module.key].forEach((item) => {
+        const date = getItemDate(item);
+        if (!date) return;
+        const key = dateKey(new Date(date));
+        counts.set(key, (counts.get(key) || 0) + 1);
+      });
     });
 
     return Array.from({ length: chartDays }, (_, index) => {
@@ -234,33 +444,56 @@ export default function Dashboard() {
         value: counts.get(dateKey(date)) || 0,
       };
     });
-  }, [dashboard.leads, chartDays]);
+  }, [chartDays, dashboard, enabledModules]);
 
-  const topProducts = useMemo(() => {
-    const products = new Map<string, number>();
-
-    dashboard.leads.forEach((lead) => {
-      lead.products?.forEach((product) => {
-        const name = product.trim();
-        if (name) products.set(name, (products.get(name) || 0) + 1);
-      });
-    });
-
-    return [...products.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([name, count]) => ({ name, count }));
-  }, [dashboard.leads]);
-
-  const recentLeads = useMemo(
+  const recentActivity = useMemo(
     () =>
-      [...dashboard.leads]
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      enabledModules
+        .flatMap((module) =>
+          dashboard[module.key].map((item) => ({
+            item,
+            module,
+            date: getItemDate(item),
+          })),
         )
-        .slice(0, 5),
-    [dashboard.leads],
+        .filter((activity) => activity.date)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 8),
+    [dashboard, enabledModules],
+  );
+
+  const attentionItems = useMemo(
+    () =>
+      enabledModules
+        .map((module) => {
+          const items = dashboard[module.key];
+          let value = 0;
+          let label = "";
+
+          if (module.key === "leads") {
+            value = leadStats.pending;
+            label = "pending leads";
+          } else if (module.key === "jobApplications") {
+            value = countByStatus(items, "new");
+            label = "new applications";
+          } else if (module.key === "siteVisits") {
+            value = countByStatus(items, "pending");
+            label = "pending visits";
+          } else if (module.key === "agents" || module.key === "vendors") {
+            value = countByStatus(items, "pending");
+            label = `pending ${module.label.toLowerCase()}`;
+          } else if (module.key === "subscribers") {
+            value = items.filter((item) => item.isActive === false).length;
+            label = "inactive subscribers";
+          } else if (module.key === "openings") {
+            value = items.filter((item) => item.isActive).length;
+            label = "active openings";
+          }
+
+          return { module, value, label };
+        })
+        .filter((item) => item.label),
+    [dashboard, enabledModules, leadStats.pending],
   );
 
   const completionRate = leadStats.total
@@ -269,8 +502,9 @@ export default function Dashboard() {
   const verificationRate = leadStats.total
     ? Math.round((leadStats.verified / leadStats.total) * 100)
     : 0;
+  const hasLeads = enabledModules.some((module) => module.key === "leads");
 
-  if (loading) {
+  if (settingsLoading || loading) {
     return (
       <div className="flex min-h-[70vh] flex-col items-center justify-center">
         <div className="mb-4 h-11 w-11 animate-spin rounded-full border-4 border-[var(--border)] border-t-[var(--primary)]" />
@@ -290,15 +524,15 @@ export default function Dashboard() {
             Dashboard Overview
           </h1>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Monitor enquiries, audience growth, and recent activity.
+            Showing data for enabled modules only.
           </p>
         </div>
 
         <button
           type="button"
-          onClick={refreshDashboard}
+          onClick={() => void loadDashboard(true)}
           disabled={refreshing}
-          className="flex h-11 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 text-sm font-medium text-[var(--text-primary)] transition hover:bg-[var(--background-secondary)] disabled:opacity-60"
+          className="flex h-11 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-5 text-sm font-medium text-[var(--text-primary)] transition hover:bg-[var(--background-secondary)] disabled:opacity-60"
         >
           <RefreshCw size={17} className={refreshing ? "animate-spin" : ""} />
           {refreshing ? "Refreshing..." : "Refresh"}
@@ -306,11 +540,11 @@ export default function Dashboard() {
       </div>
 
       {error && (
-        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 flex flex-col gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-red-600">{error}</p>
           <button
             type="button"
-            onClick={refreshDashboard}
+            onClick={() => void loadDashboard(true)}
             className="text-sm font-semibold text-red-600"
           >
             Try again
@@ -319,304 +553,294 @@ export default function Dashboard() {
       )}
 
       {partialWarning && !error && (
-        <div className="mb-6 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm text-yellow-700">
-          Some dashboard services did not respond. Available data is shown
-          below.
+        <div className="mb-6 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm text-yellow-700">
+          Some enabled dashboard services did not respond. Available data is
+          shown below.
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 md:gap-4">
-        <StatCard
-          title="Total Leads"
-          value={leadStats.total}
-          subtitle={`${leadStats.today} today`}
-          icon={<Users size={19} />}
-          color="blue"
-          href="/admin/lead"
-        />
-        <StatCard
-          title="Site Visits"
-          value={dashboard.siteVisits}
-          subtitle="All requests"
-          icon={<MapPinned size={19} />}
-          color="violet"
-          href="/admin/site-visit"
-        />
-        <StatCard
-          title="Subscribers"
-          value={dashboard.subscribers}
-          subtitle="Email audience"
-          icon={<Mail size={19} />}
-          color="green"
-          href="/admin/subscribers"
-        />
-        <StatCard
-          title="Agents"
-          value={dashboard.agents}
-          subtitle="Applications"
-          icon={<BriefcaseBusiness size={19} />}
-          color="orange"
-          href="/admin/agents"
-        />
-        <StatCard
-          title="Vendors"
-          value={dashboard.vendors}
-          subtitle="Registrations"
-          icon={<UserRoundCheck size={19} />}
-          color="red"
-          href="/admin/vendors"
-        />
-        <StatCard
-          title="Clients"
-          value={dashboard.clients}
-          subtitle="Published clients"
-          icon={<ShieldCheck size={19} />}
-          color="cyan"
-          href="/admin/clients"
-        />
-      </div>
-
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-        <MiniStat
-          label="Leads This Month"
-          value={leadStats.thisMonth}
-          icon={<CalendarDays size={18} />}
-        />
-        <MiniStat
-          label="Pending Leads"
-          value={leadStats.pending}
-          icon={<Clock3 size={18} />}
-          accent="text-yellow-600"
-        />
-        <MiniStat
-          label="Completed Leads"
-          value={leadStats.completed}
-          icon={<CheckCircle2 size={18} />}
-          accent="text-green-600"
-        />
-        <MiniStat
-          label="Verified Leads"
-          value={leadStats.verified}
-          icon={<ShieldCheck size={18} />}
-          accent="text-violet-600"
-        />
-      </div>
-
-      <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.75fr)]">
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 md:p-6">
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <TrendingUp size={19} className="text-[var(--primary)]" />
-                <h2 className="font-semibold text-[var(--text-primary)]">
-                  Lead Trend
-                </h2>
-              </div>
-              <p className="text-xs text-[var(--text-secondary)]">
-                New leads received over the selected period
-              </p>
-            </div>
-
-            <div className="flex rounded-xl border border-[var(--border)] bg-[var(--background-secondary)] p-1">
-              {[7, 30].map((days) => (
-                <button
-                  key={days}
-                  type="button"
-                  onClick={() => setChartDays(days as 7 | 30)}
-                  className={`h-8 rounded-lg px-3 text-xs font-semibold transition ${
-                    chartDays === days
-                      ? "bg-[var(--primary)] text-white shadow-sm"
-                      : "text-[var(--text-secondary)]"
-                  }`}
-                >
-                  {days} Days
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <LeadChart data={chartData} />
-        </div>
-
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 md:p-6">
-          <h2 className="font-semibold text-[var(--text-primary)]">
-            Lead Health
-          </h2>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            Current processing and verification progress
-          </p>
-
-          <div className="mt-7 space-y-7">
-            <ProgressMetric
-              label="Completion Rate"
-              value={completionRate}
-              count={`${leadStats.completed} of ${leadStats.total}`}
-              color="bg-green-500"
+      {enabledModules.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <>
+          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 md:gap-4">
+            <SummaryCard
+              title="Enabled Modules"
+              value={enabledModules.length}
+              subtitle={`${totalRecords} total records`}
+              icon={<Gauge size={19} />}
+              color="slate"
             />
-            <ProgressMetric
-              label="Verification Rate"
-              value={verificationRate}
-              count={`${leadStats.verified} of ${leadStats.total}`}
-              color="bg-violet-500"
-            />
+            {enabledModules.map((module) => (
+              <StatCard
+                key={module.key}
+                title={module.label}
+                value={dashboard[module.key].length}
+                subtitle={module.subtitle(dashboard[module.key])}
+                icon={module.icon}
+                color={module.color}
+                href={module.href}
+              />
+            ))}
           </div>
 
-          <div className="mt-8 rounded-2xl border border-[var(--border)] bg-[var(--background-secondary)] p-4">
-            <p className="text-xs uppercase tracking-wider text-[var(--text-secondary)]">
-              Needs Attention
-            </p>
-            <div className="mt-3 flex items-end justify-between gap-3">
-              <div>
-                <p className="text-3xl font-bold text-yellow-600">
-                  {leadStats.pending}
-                </p>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  pending leads
-                </p>
-              </div>
-              <Link
-                href="/admin/lead"
-                className="flex items-center gap-1 text-xs font-semibold text-[var(--primary)]"
-              >
-                Review <ArrowRight size={14} />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
-        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
-          <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4 md:px-6">
-            <div>
-              <h2 className="font-semibold text-[var(--text-primary)]">
-                Recent Leads
-              </h2>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                Latest enquiries received
-              </p>
-            </div>
-            <Link
-              href="/admin/lead"
-              className="flex items-center gap-1 text-xs font-semibold text-[var(--primary)]"
-            >
-              View all <ArrowRight size={14} />
-            </Link>
-          </div>
-
-          {recentLeads.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-[var(--background-secondary)]">
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] md:px-6">
-                      Lead
-                    </th>
-                    <th className="hidden px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] sm:table-cell">
-                      Company
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] md:px-5">
-                      Status
-                    </th>
-                    <th className="hidden px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] md:table-cell">
-                      Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentLeads.map((lead) => (
-                    <tr
-                      key={lead._id}
-                      className="border-t border-[var(--border)] transition hover:bg-[var(--background-secondary)]"
-                    >
-                      <td className="px-4 py-4 md:px-6">
-                        <p className="text-sm font-medium text-[var(--text-primary)]">
-                          {lead.name}
-                        </p>
-                        <p className="mt-1 max-w-[220px] truncate text-xs text-[var(--text-secondary)]">
-                          {lead.email}
-                        </p>
-                      </td>
-                      <td className="hidden px-5 py-4 text-sm text-[var(--text-primary)] sm:table-cell">
-                        {lead.companyName || "Not provided"}
-                      </td>
-                      <td className="px-4 py-4 md:px-5">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                            lead.marked
-                              ? "bg-green-500/10 text-green-600"
-                              : "bg-yellow-500/10 text-yellow-600"
-                          }`}
-                        >
-                          {lead.marked ? "Completed" : "Pending"}
-                        </span>
-                      </td>
-                      <td className="hidden whitespace-nowrap px-5 py-4 text-xs text-[var(--text-secondary)] md:table-cell">
-                        {new Date(lead.createdAt).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="p-10 text-center text-sm text-[var(--text-secondary)]">
-              No leads available yet.
+          {hasLeads && (
+            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+              <MiniStat
+                label="Leads This Month"
+                value={leadStats.thisMonth}
+                icon={<CalendarDays size={18} />}
+              />
+              <MiniStat
+                label="Pending Leads"
+                value={leadStats.pending}
+                icon={<Clock3 size={18} />}
+                accent="text-yellow-600"
+              />
+              <MiniStat
+                label="Completed Leads"
+                value={leadStats.completed}
+                icon={<CheckCircle2 size={18} />}
+                accent="text-green-600"
+              />
+              <MiniStat
+                label="Verified Leads"
+                value={leadStats.verified}
+                icon={<ShieldCheck size={18} />}
+                accent="text-violet-600"
+              />
             </div>
           )}
-        </div>
 
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 md:p-6">
-          <h2 className="font-semibold text-[var(--text-primary)]">
-            Top Product Interest
-          </h2>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">
-            Most requested products across all leads
-          </p>
+          <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.85fr)]">
+            <Panel>
+              <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="mb-2 flex items-center gap-2">
+                    <TrendingUp size={19} className="text-[var(--primary)]" />
+                    <h2 className="font-semibold text-[var(--text-primary)]">
+                      Activity Trend
+                    </h2>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    New records across enabled modules
+                  </p>
+                </div>
 
-          {topProducts.length > 0 ? (
-            <div className="mt-6 space-y-5">
-              {topProducts.map((product, index) => {
-                const maxCount = topProducts[0]?.count || 1;
-                const width = Math.max((product.count / maxCount) * 100, 8);
+                <div className="flex rounded-lg border border-[var(--border)] bg-[var(--background-secondary)] p-1">
+                  {[7, 30].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setChartDays(days as 7 | 30)}
+                      className={`h-8 rounded-md px-3 text-xs font-semibold transition ${
+                        chartDays === days
+                          ? "bg-[var(--primary)] text-white shadow-sm"
+                          : "text-[var(--text-secondary)]"
+                      }`}
+                    >
+                      {days} Days
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                return (
-                  <div key={product.name}>
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]/10 text-xs font-bold text-[var(--primary)]">
-                          {index + 1}
+              <ActivityChart data={chartData} />
+            </Panel>
+
+            <Panel>
+              {hasLeads ? (
+                <>
+                  <h2 className="font-semibold text-[var(--text-primary)]">
+                    Lead Health
+                  </h2>
+                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                    Current processing and verification progress
+                  </p>
+
+                  <div className="mt-7 space-y-7">
+                    <ProgressMetric
+                      label="Completion Rate"
+                      value={completionRate}
+                      count={`${leadStats.completed} of ${leadStats.total}`}
+                      color="bg-green-500"
+                    />
+                    <ProgressMetric
+                      label="Verification Rate"
+                      value={verificationRate}
+                      count={`${leadStats.verified} of ${leadStats.total}`}
+                      color="bg-violet-500"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="font-semibold text-[var(--text-primary)]">
+                    Module Mix
+                  </h2>
+                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                    Enabled menu sections currently feeding the dashboard
+                  </p>
+                  <div className="mt-5 space-y-3">
+                    {enabledModules.slice(0, 6).map((module) => (
+                      <div
+                        key={module.key}
+                        className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--background-secondary)] px-4 py-3"
+                      >
+                        <span className="text-sm font-medium">
+                          {module.label}
                         </span>
-                        <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                          {product.name}
+                        <span className="text-sm font-bold">
+                          {dashboard[module.key].length}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {attentionItems.length > 0 && (
+                <div className="mt-8 rounded-lg border border-[var(--border)] bg-[var(--background-secondary)] p-4">
+                  <p className="text-xs uppercase tracking-wider text-[var(--text-secondary)]">
+                    Quick Focus
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    {attentionItems
+                      .slice(0, 4)
+                      .map(({ module, value, label }) => (
+                        <Link
+                          key={module.key}
+                          href={module.href}
+                          className="flex items-center justify-between gap-3 text-sm"
+                        >
+                          <span className="text-[var(--text-secondary)]">
+                            {label}
+                          </span>
+                          <span className="flex items-center gap-1 font-bold text-[var(--primary)]">
+                            {value} <ArrowRight size={14} />
+                          </span>
+                        </Link>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </Panel>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
+            <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)]">
+              <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4 md:px-6">
+                <div>
+                  <h2 className="font-semibold text-[var(--text-primary)]">
+                    Recent Activity
+                  </h2>
+                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                    Latest records from enabled modules
+                  </p>
+                </div>
+              </div>
+
+              {recentActivity.length > 0 ? (
+                <div className="divide-y divide-[var(--border)]">
+                  {recentActivity.map(({ item, module, date }, index) => (
+                    <Link
+                      key={`${module.key}-${item._id || item.id || index}`}
+                      href={module.href}
+                      className="flex items-center justify-between gap-4 px-5 py-4 transition hover:bg-[var(--background-secondary)] md:px-6"
+                    >
+                      <div className="min-w-0">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-[var(--background-secondary)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                            {module.singular}
+                          </span>
+                          <span className="text-xs text-[var(--text-secondary)]">
+                            {new Date(date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                          {getItemTitle(item, module.singular)}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-[var(--text-secondary)]">
+                          {getItemDetail(item)}
                         </p>
                       </div>
-                      <span className="text-xs font-semibold text-[var(--text-secondary)]">
-                        {product.count}
-                      </span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--background-secondary)]">
-                      <div
-                        className="h-full rounded-full bg-[var(--primary)]"
-                        style={{ width: `${width}%` }}
+                      <ArrowRight
+                        size={16}
+                        className="shrink-0 text-[var(--text-secondary)]"
                       />
-                    </div>
-                  </div>
-                );
-              })}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-10 text-center text-sm text-[var(--text-secondary)]">
+                  No activity available for enabled modules yet.
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="mt-8 rounded-2xl bg-[var(--background-secondary)] p-8 text-center text-sm text-[var(--text-secondary)]">
-              Product interest will appear when leads select products.
-            </div>
-          )}
-        </div>
-      </div>
+
+            <Panel>
+              <h2 className="font-semibold text-[var(--text-primary)]">
+                Enabled Menu
+              </h2>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                Dashboard data follows these settings
+              </p>
+
+              <div className="mt-5 space-y-3">
+                {enabledModules.map((module) => (
+                  <Link
+                    key={module.key}
+                    href={module.href}
+                    className="flex items-center justify-between rounded-lg border border-[var(--border)] p-3 transition hover:bg-[var(--background-secondary)]"
+                  >
+                    <span className="flex min-w-0 items-center gap-3 text-sm font-medium">
+                      <span className="text-[var(--primary)]">
+                        {module.icon}
+                      </span>
+                      <span className="truncate">{module.label}</span>
+                    </span>
+                    <span className="text-sm font-bold">
+                      {dashboard[module.key].length}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </Panel>
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-function LeadChart({
+function EmptyState() {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-10 text-center">
+      <h2 className="text-xl font-semibold text-[var(--text-primary)]">
+        No modules enabled
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-[var(--text-secondary)]">
+        Enable modules from settings to show their dashboard data here.
+      </p>
+      <Link
+        href="/admin/settings"
+        className="mt-5 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-5 text-sm font-semibold text-white"
+      >
+        Open Settings <ArrowRight size={16} />
+      </Link>
+    </div>
+  );
+}
+
+function Panel({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-5 md:p-6">
+      {children}
+    </div>
+  );
+}
+
+function ActivityChart({
   data,
 }: {
   data: Array<{ key: string; label: string; value: number }>;
@@ -650,10 +874,10 @@ function LeadChart({
           viewBox={`0 0 ${width} ${height}`}
           className="h-auto min-h-[220px] w-full"
           role="img"
-          aria-label="Lead trend chart"
+          aria-label="Activity trend chart"
         >
           <defs>
-            <linearGradient id="leadArea" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="activityArea" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.3" />
               <stop
                 offset="100%"
@@ -690,7 +914,7 @@ function LeadChart({
             );
           })}
 
-          <polygon points={areaPoints} fill="url(#leadArea)" />
+          <polygon points={areaPoints} fill="url(#activityArea)" />
           <polyline
             points={linePoints}
             fill="none"
@@ -711,7 +935,7 @@ function LeadChart({
                 strokeWidth="2.5"
               >
                 <title>
-                  {point.label}: {point.value} leads
+                  {point.label}: {point.value} records
                 </title>
               </circle>
               {(index % labelInterval === 0 || index === points.length - 1) && (
@@ -732,7 +956,7 @@ function LeadChart({
 
       <div className="mt-1 flex items-center justify-between border-t border-[var(--border)] pt-4 text-xs text-[var(--text-secondary)]">
         <span>
-          {data.reduce((sum, item) => sum + item.value, 0)} total leads
+          {data.reduce((sum, item) => sum + item.value, 0)} total records
         </span>
         <span>
           Peak: {Math.max(...data.map((item) => item.value), 0)} per day
@@ -788,9 +1012,9 @@ function MiniStat({
   accent?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+    <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
       <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--background-secondary)] ${accent}`}
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--background-secondary)] ${accent}`}
       >
         {icon}
       </div>
@@ -800,6 +1024,43 @@ function MiniStat({
           {value}
         </p>
       </div>
+    </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  color,
+}: {
+  title: string;
+  value: number;
+  subtitle: string;
+  icon: ReactNode;
+  color: ModuleColor;
+}) {
+  return (
+    <div
+      className={`rounded-lg border bg-gradient-to-br p-4 ${cardStyles[color].card}`}
+    >
+      <div className="mb-4 flex items-start justify-between gap-2">
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-lg ${cardStyles[color].icon}`}
+        >
+          {icon}
+        </div>
+      </div>
+      <p className="text-xs uppercase tracking-wider text-[var(--text-secondary)]">
+        {title}
+      </p>
+      <p className={`mt-2 text-3xl font-bold ${cardStyles[color].value}`}>
+        {value}
+      </p>
+      <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
+        {subtitle}
+      </p>
     </div>
   );
 }
@@ -816,50 +1077,19 @@ function StatCard({
   value: number;
   subtitle: string;
   icon: ReactNode;
-  color: "blue" | "violet" | "green" | "orange" | "red" | "cyan";
+  color: ModuleColor;
   href: string;
 }) {
-  const styles = {
-    blue: {
-      card: "from-blue-500/10 to-blue-600/5 border-blue-500/20",
-      icon: "bg-blue-500/10 text-blue-600",
-      value: "text-blue-600",
-    },
-    violet: {
-      card: "from-violet-500/10 to-violet-600/5 border-violet-500/20",
-      icon: "bg-violet-500/10 text-violet-600",
-      value: "text-violet-600",
-    },
-    green: {
-      card: "from-green-500/10 to-green-600/5 border-green-500/20",
-      icon: "bg-green-500/10 text-green-600",
-      value: "text-green-600",
-    },
-    orange: {
-      card: "from-orange-500/10 to-orange-600/5 border-orange-500/20",
-      icon: "bg-orange-500/10 text-orange-600",
-      value: "text-orange-600",
-    },
-    red: {
-      card: "from-red-500/10 to-red-600/5 border-red-500/20",
-      icon: "bg-red-500/10 text-red-600",
-      value: "text-red-600",
-    },
-    cyan: {
-      card: "from-cyan-500/10 to-cyan-600/5 border-cyan-500/20",
-      icon: "bg-cyan-500/10 text-cyan-600",
-      value: "text-cyan-600",
-    },
-  }[color];
+  const styles = cardStyles[color];
 
   return (
     <Link
       href={href}
-      className={`group rounded-2xl border bg-gradient-to-br p-4 transition hover:-translate-y-0.5 hover:shadow-lg ${styles.card}`}
+      className={`group rounded-lg border bg-gradient-to-br p-4 transition hover:-translate-y-0.5 hover:shadow-lg ${styles.card}`}
     >
       <div className="mb-4 flex items-start justify-between gap-2">
         <div
-          className={`flex h-10 w-10 items-center justify-center rounded-xl ${styles.icon}`}
+          className={`flex h-10 w-10 items-center justify-center rounded-lg ${styles.icon}`}
         >
           {icon}
         </div>
@@ -878,3 +1108,64 @@ function StatCard({
     </Link>
   );
 }
+
+const cardStyles: Record<
+  ModuleColor,
+  { card: string; icon: string; value: string }
+> = {
+  blue: {
+    card: "from-blue-500/10 to-blue-600/5 border-blue-500/20",
+    icon: "bg-blue-500/10 text-blue-600",
+    value: "text-blue-600",
+  },
+  violet: {
+    card: "from-violet-500/10 to-violet-600/5 border-violet-500/20",
+    icon: "bg-violet-500/10 text-violet-600",
+    value: "text-violet-600",
+  },
+  green: {
+    card: "from-green-500/10 to-green-600/5 border-green-500/20",
+    icon: "bg-green-500/10 text-green-600",
+    value: "text-green-600",
+  },
+  orange: {
+    card: "from-orange-500/10 to-orange-600/5 border-orange-500/20",
+    icon: "bg-orange-500/10 text-orange-600",
+    value: "text-orange-600",
+  },
+  red: {
+    card: "from-red-500/10 to-red-600/5 border-red-500/20",
+    icon: "bg-red-500/10 text-red-600",
+    value: "text-red-600",
+  },
+  cyan: {
+    card: "from-cyan-500/10 to-cyan-600/5 border-cyan-500/20",
+    icon: "bg-cyan-500/10 text-cyan-600",
+    value: "text-cyan-600",
+  },
+  slate: {
+    card: "from-slate-500/10 to-slate-600/5 border-slate-500/20",
+    icon: "bg-slate-500/10 text-slate-600",
+    value: "text-slate-600",
+  },
+  pink: {
+    card: "from-pink-500/10 to-pink-600/5 border-pink-500/20",
+    icon: "bg-pink-500/10 text-pink-600",
+    value: "text-pink-600",
+  },
+  amber: {
+    card: "from-amber-500/10 to-amber-600/5 border-amber-500/20",
+    icon: "bg-amber-500/10 text-amber-600",
+    value: "text-amber-600",
+  },
+  emerald: {
+    card: "from-emerald-500/10 to-emerald-600/5 border-emerald-500/20",
+    icon: "bg-emerald-500/10 text-emerald-600",
+    value: "text-emerald-600",
+  },
+  indigo: {
+    card: "from-indigo-500/10 to-indigo-600/5 border-indigo-500/20",
+    icon: "bg-indigo-500/10 text-indigo-600",
+    value: "text-indigo-600",
+  },
+};
