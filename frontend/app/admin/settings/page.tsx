@@ -6,7 +6,6 @@ import {
   ArrowUp,
   Building2,
   Edit3,
-  ImageIcon,
   LayoutGrid,
   Plus,
   Save,
@@ -21,19 +20,56 @@ import {
   type LeadFieldType,
 } from "../../types/leadForm";
 
-const moduleList = [
-  { key: "leads", label: "Leads" },
-  { key: "blogs", label: "Blogs" },
-  { key: "agents", label: "Agents" },
-  { key: "employees", label: "Employees" },
-  { key: "newsletter", label: "Newsletter" },
-  { key: "subscribers", label: "Subscribers" },
-  { key: "clients", label: "Clients" },
-  { key: "vendors", label: "Vendors" },
-  { key: "siteVisits", label: "Site Visits" },
-  { key: "openings", label: "Openings" },
-  { key: "jobApplications", label: "Job Applications" },
+const moduleCategories = [
+  {
+    title: "Lead Generation",
+    description: "Capture, qualify, and follow up with incoming prospects.",
+    modules: [
+      { key: "leads", label: "Leads" },
+      { key: "siteVisits", label: "Site Visits" },
+    ],
+  },
+  {
+    title: "Content & Audience",
+    description: "Manage communication, subscribers, and published content.",
+    modules: [
+      { key: "subscribers", label: "Subscribers" },
+      { key: "newsletter", label: "Newsletter" },
+      { key: "blogs", label: "Blogs" },
+      { key: "articles", label: "Articles", planned: true },
+    ],
+  },
+  {
+    title: "Hiring",
+    description: "Publish openings and review candidate applications.",
+    modules: [
+      { key: "openings", label: "Job Openings" },
+      { key: "jobApplications", label: "Job Applications" },
+    ],
+  },
+  {
+    title: "Brand Trust",
+    description: "Showcase customers and social proof across the website.",
+    modules: [
+      { key: "clients", label: "Clients" },
+      { key: "testimonials", label: "Testimonials", planned: true },
+    ],
+  },
+  {
+    title: "Network",
+    description: "Organize external business relationships.",
+    modules: [
+      { key: "agents", label: "Agents" },
+      { key: "vendors", label: "Vendors" },
+    ],
+  },
+  {
+    title: "Team",
+    description: "Manage employees and lead ownership.",
+    modules: [{ key: "employees", label: "Employees" }],
+  },
 ];
+const moduleList = moduleCategories.flatMap((category) => category.modules);
 
 const emptyField: LeadCustomField = {
   id: "",
@@ -344,29 +380,53 @@ export default function SettingsPage() {
 
       <section className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
         <div className="mb-6 flex items-center gap-3">
-          <ImageIcon size={22} />
+          <LayoutGrid size={22} />
           <h2 className="text-xl font-semibold">Module Management</h2>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {moduleList.map((module) => (
+        <div className="grid gap-5 lg:grid-cols-2">
+          {moduleCategories.map((category) => (
             <div
-              key={module.key}
-              className="flex items-center justify-between rounded-xl border border-[var(--border)] p-4"
+              key={category.title}
+              className="rounded-2xl border border-[var(--border)] p-5"
             >
-              <span className="font-medium">{module.label}</span>
-              <button
-                onClick={() => toggleModule(module.key)}
-                className={`relative h-7 w-14 rounded-full transition ${
-                  modules[module.key] ? "bg-green-500" : "bg-gray-300"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition ${
-                    modules[module.key] ? "left-7" : "left-0.5"
-                  }`}
-                />
-              </button>
+              <div className="mb-4">
+                <h3 className="font-semibold">{category.title}</h3>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                  {category.description}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {category.modules.map((module) => (
+                  <div
+                    key={module.key}
+                    className="flex items-center justify-between gap-4 rounded-xl bg-[var(--background-secondary)] p-4"
+                  >
+                    <div>
+                      <span className="font-medium">{module.label}</span>
+                      {module.planned && (
+                        <p className="mt-1 text-xs font-medium uppercase tracking-wider text-[var(--text-secondary)]">
+                          Planned
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => toggleModule(module.key)}
+                      disabled={module.planned}
+                      className={`relative h-7 w-14 rounded-full transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                        modules[module.key] ? "bg-green-500" : "bg-gray-300"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition ${
+                          modules[module.key] ? "left-7" : "left-0.5"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>

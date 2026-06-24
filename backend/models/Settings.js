@@ -63,6 +63,11 @@ const settingsSchema = new mongoose.Schema({
       default: true,
     },
 
+    articles: {
+      type: Boolean,
+      default: false,
+    },
+
     agents: {
       type: Boolean,
       default: true,
@@ -86,6 +91,11 @@ const settingsSchema = new mongoose.Schema({
     clients: {
       type: Boolean,
       default: true,
+    },
+
+    testimonials: {
+      type: Boolean,
+      default: false,
     },
 
     vendors: {

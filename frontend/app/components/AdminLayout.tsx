@@ -1,6 +1,6 @@
 "use client";
 
-import { FaBars, FaTimes, FaMailBulk } from "react-icons/fa";
+import { FaBars, FaMailBulk, FaTimes } from "react-icons/fa";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -20,7 +20,6 @@ import {
   UserCog,
   Users,
   Users2,
-  UserX2,
 } from "lucide-react";
 
 import Cookies from "js-cookie";
@@ -35,90 +34,125 @@ export default function AdminLayout({
   const router = useRouter();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { settings, loading } = useSettings();
-  const navItems = [
+  const { settings } = useSettings();
+  const navSections = [
     {
-      key: "dashboard",
-      icon: <Gauge size={18} />,
-      label: "Dashboard",
-      to: "/admin",
+      title: "Overview",
+      items: [
+        {
+          key: "dashboard",
+          icon: <Gauge size={18} />,
+          label: "Dashboard",
+          to: "/admin",
+        },
+      ],
     },
     {
-      key: "leads",
-      icon: <Users size={18} />,
-      label: "Leads",
-      to: "/admin/lead",
+      title: "Lead Generation",
+      items: [
+        {
+          key: "leads",
+          icon: <Users size={18} />,
+          label: "Leads",
+          to: "/admin/lead",
+        },
+        {
+          key: "siteVisits",
+          icon: <MonitorPlay size={18} />,
+          label: "Site Visits",
+          to: "/admin/site-visit",
+        },
+      ],
     },
     {
-      key: "siteVisits",
-      icon: <MonitorPlay size={18} />,
-      label: "Site Visits",
-      to: "/admin/site-visit",
+      title: "Content & Audience",
+      items: [
+        {
+          key: "subscribers",
+          icon: <User2 size={18} />,
+          label: "Subscribers",
+          to: "/admin/subscribers",
+        },
+        {
+          key: "newsletter",
+          icon: <FaMailBulk size={18} />,
+          label: "Newsletter",
+          to: "/admin/newsletter",
+        },
+        {
+          key: "blogs",
+          icon: <Newspaper size={18} />,
+          label: "Blogs",
+          to: "/admin/blogs",
+        },
+      ],
     },
     {
-      key: "subscribers",
-      icon: <User2 size={18} />,
-      label: "Subscribers",
-      to: "/admin/subscribers",
+      title: "Hiring",
+      items: [
+        {
+          key: "openings",
+          icon: <Briefcase size={18} />,
+          label: "Job Openings",
+          to: "/admin/openings",
+        },
+        {
+          key: "jobApplications",
+          icon: <FileCheck size={18} />,
+          label: "Applications",
+          to: "/admin/job-applications",
+        },
+      ],
     },
     {
-      key: "clients",
-      icon: <Users2 size={18} />,
-      label: "Clients",
-      to: "/admin/clients",
+      title: "Brand Trust",
+      items: [
+        {
+          key: "clients",
+          icon: <Users2 size={18} />,
+          label: "Clients",
+          to: "/admin/clients",
+        },
+      ],
     },
     {
-      key: "newsletter",
-      icon: <FaMailBulk size={18} />,
-      label: "Newsletter",
-      to: "/admin/newsletter",
+      title: "Network",
+      items: [
+        {
+          key: "agents",
+          icon: <UserCog size={18} />,
+          label: "Agents",
+          to: "/admin/agents",
+        },
+        {
+          key: "vendors",
+          icon: <Building2 size={18} />,
+          label: "Vendors",
+          to: "/admin/vendors",
+        },
+      ],
     },
     {
-      key: "blogs",
-      icon: <Newspaper size={18} />,
-      label: "Blogs",
-      to: "/admin/blogs",
-    },
-    {
-      key: "agents",
-      icon: <UserCog size={18} />,
-      label: "Agents",
-      to: "/admin/agents",
-    },
-    {
-      key: "vendors",
-      icon: <Building2 size={18} />,
-      label: "Vendors",
-      to: "/admin/vendors",
-    },
-    {
-      key: "openings",
-      icon: <Briefcase size={18} />,
-      label: "Openings",
-      to: "/admin/openings",
-    },
-    {
-      key: "jobApplications",
-      icon: <FileCheck size={18} />,
-      label: "Job Applications",
-      to: "/admin/job-applications",
-    },
-    {
-      key: "employees",
-      icon: <FaUserGraduate size={18} />,
-      label: "Employees",
-      to: "/admin/employee",
+      title: "Team",
+      items: [
+        {
+          key: "employees",
+          icon: <FaUserGraduate size={18} />,
+          label: "Employees",
+          to: "/admin/employee",
+        },
+      ],
     },
   ];
 
-  const filteredNavItems = navItems.filter((item) => {
-    // Dashboard & Settings always visible
-    if (item.to === "/admin" || item.to === "/admin/settings") {
-      return true;
-    }
-
-    return settings?.modules?.[item.key];
-  });
+  const filteredNavSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => item.to === "/admin" || settings?.modules?.[item.key],
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
   const logoUrl = settings?.branding?.logo || "/logo.png";
   const handleLogout = () => {
     Cookies.remove("adminAuth");
@@ -188,27 +222,34 @@ export default function AdminLayout({
         </div>
 
         {/* Nav */}
-        <nav className="flex flex-col mt-6 px-3 gap-2">
-          {filteredNavItems.map(({ icon, label, to }) => (
-            <Link
-              key={to}
-              href={to}
-              onClick={() => setMobileMenuOpen(false)}
-              className={`
-                  flex items-center gap-3
-                  px-4 py-3 rounded-xl
-                  text-sm font-medium
-                  transition-all duration-300
-                  ${
-                    pathname === to
-                      ? "bg-[var(--primary)] text-white shadow-[0_8px_20px_rgba(184,155,94,0.25)]"
-                      : "text-[var(--text-light)] hover:bg-[var(--bg-secondary)] hover:text-[var(--primary)]"
-                  }
-                `}
-            >
-              {icon}
-              {label}
-            </Link>
+        <nav className="mt-5 flex max-h-[calc(100vh-190px)] flex-col gap-5 overflow-y-auto px-3 pb-4">
+          {filteredNavSections.map((section) => (
+            <div key={section.title}>
+              <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-secondary)]">
+                {section.title}
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {section.items.map(({ icon, label, to }) => (
+                  <Link
+                    key={to}
+                    href={to}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`
+                      flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium
+                      transition-all duration-300
+                      ${
+                        pathname === to
+                          ? "bg-[var(--primary)] text-white shadow-[0_8px_20px_rgba(184,155,94,0.25)]"
+                          : "text-[var(--text-light)] hover:bg-[var(--bg-secondary)] hover:text-[var(--primary)]"
+                      }
+                    `}
+                  >
+                    {icon}
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
@@ -233,7 +274,6 @@ export default function AdminLayout({
               <Settings size={17} />
               Settings
             </Link>
-            ```
             <button
               type="button"
               onClick={handleLogout}
@@ -249,7 +289,6 @@ export default function AdminLayout({
               <LogOut size={17} />
               Logout
             </button>
-            ```
           </div>
         </div>
       </div>
@@ -258,7 +297,7 @@ export default function AdminLayout({
         className="
     hidden lg:flex
     flex-col
-    w-48
+    w-60
     fixed
     h-screen
     bg-[var(--sidebar-card)]
@@ -279,26 +318,33 @@ export default function AdminLayout({
 
         {/* Scrollable Navigation */}
         <div className="flex-1 overflow-y-auto px-5 pb-5">
-          <nav className="flex flex-col gap-2">
-            {filteredNavItems.map(({ icon, label, to }) => (
-              <Link
-                key={to}
-                href={to}
-                className={`
-            flex items-center gap-3
-            px-4 py-3 rounded-xl
-            text-sm font-medium
-            transition-all duration-300
-            ${
-              pathname === to
-                ? "bg-[var(--primary)] text-white shadow-lg"
-                : "text-[var(--text-secondary)] hover:bg-[var(--muted)] hover:text-[var(--primary)]"
-            }
-          `}
-              >
-                {icon}
-                {label}
-              </Link>
+          <nav className="flex flex-col gap-5">
+            {filteredNavSections.map((section) => (
+              <div key={section.title}>
+                <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[2px] text-[var(--text-secondary)]">
+                  {section.title}
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {section.items.map(({ icon, label, to }) => (
+                    <Link
+                      key={to}
+                      href={to}
+                      className={`
+                        flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium
+                        transition-all duration-300
+                        ${
+                          pathname === to
+                            ? "bg-[var(--primary)] text-white shadow-lg"
+                            : "text-[var(--text-secondary)] hover:bg-[var(--muted)] hover:text-[var(--primary)]"
+                        }
+                      `}
+                    >
+                      {icon}
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
         </div>
@@ -345,7 +391,7 @@ export default function AdminLayout({
       {/* MAIN CONTENT */}
       <main
         className="
-    flex-1 lg:ml-48
+    flex-1 lg:ml-60
     overflow-y-auto
     min-h-screen
     p-5 sm:p-8
