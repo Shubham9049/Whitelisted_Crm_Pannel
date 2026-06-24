@@ -51,7 +51,13 @@ interface Lead {
   activityLog?: ActivityItem[];
 }
 
-const statuses = ["new", "contacted", "follow-up", "qualified", "won", "lost"];
+const statuses = [
+  "new",
+  "contacted",
+  "follow-up",
+  "interested",
+  "not-interested",
+];
 
 export default function LeadDetailsPage() {
   const { id } = useParams();
@@ -253,25 +259,6 @@ export default function LeadDetailsPage() {
               </p>
             </div>
           </Panel>
-
-          <Panel title="Products" icon={<CheckCircle2 size={18} />}>
-            <div className="md:col-span-2 flex flex-wrap gap-2">
-              {lead.products?.length ? (
-                lead.products.map((product) => (
-                  <span
-                    key={product}
-                    className="rounded-full bg-[var(--primary)]/10 px-3 py-1 text-sm text-[var(--primary)]"
-                  >
-                    {product}
-                  </span>
-                ))
-              ) : (
-                <span className="text-sm text-[var(--text-secondary)]">
-                  No product selected.
-                </span>
-              )}
-            </div>
-          </Panel>
         </div>
 
         <div className="space-y-6">
@@ -284,7 +271,9 @@ export default function LeadDetailsPage() {
               >
                 {statuses.map((item) => (
                   <option key={item} value={item}>
-                    {item.replace("-", " ")}
+                    {item
+                      .replace("-", " ")
+                      .replace(/\b\w/g, (char) => char.toUpperCase())}
                   </option>
                 ))}
               </select>

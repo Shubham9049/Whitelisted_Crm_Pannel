@@ -40,8 +40,12 @@ interface LeadRequest {
   email: string;
   phone: string;
   companyName?: string;
-  leadStatus?: "new" | "contacted" | "follow-up" | "qualified" | "won" | "lost";
-  marked?: boolean;
+  leadStatus?:
+    | "new"
+    | "contacted"
+    | "follow-up"
+    | "interested"
+    | "not-interested";
   followUpDate?: string | null;
   followUpRemark?: string;
   assignedTo?: {
@@ -200,7 +204,7 @@ export default function AdminEmployee() {
     inactive: employees.filter((e) => !e.active).length,
     assignedLeads: leads.filter((lead) => lead.assignedTo).length,
     followUps: leads.filter((lead) => lead.leadStatus === "follow-up").length,
-    won: leads.filter((lead) => lead.leadStatus === "won").length,
+    interested: leads.filter((lead) => lead.leadStatus === "interested").length,
   };
 
   const hasActiveFilters =
@@ -276,9 +280,12 @@ export default function AdminEmployee() {
       total: assigned.length,
       followUps: assigned.filter((lead) => lead.leadStatus === "follow-up")
         .length,
-      won: assigned.filter((lead) => lead.leadStatus === "won").length,
-      open: assigned.filter((lead) => !lead.marked && lead.leadStatus !== "won")
+      interested: assigned.filter((lead) => lead.leadStatus === "interested")
         .length,
+      open: assigned.filter(
+        (lead) =>
+          !["interested", "not-interested"].includes(lead.leadStatus || "new"),
+      ).length,
     };
   };
 
@@ -359,8 +366,8 @@ export default function AdminEmployee() {
             color="yellow"
           />
           <StatCard
-            label="Won"
-            value={stats.won}
+            label="Interested"
+            value={stats.interested}
             icon={<CheckCircle2 size={18} />}
             color="red"
           />
@@ -632,7 +639,7 @@ export default function AdminEmployee() {
                               {pipeline.followUps} follow-ups
                             </span>
                             <span className="rounded-full bg-green-500/10 px-2 py-1 font-semibold text-green-600">
-                              {pipeline.won} won
+                              {pipeline.interested} interested
                             </span>
                           </div>
                         </td>
@@ -732,7 +739,12 @@ function EmployeeLeadsModal({
 }: {
   employee: Employee;
   leads: LeadRequest[];
-  pipeline: { total: number; followUps: number; won: number; open: number };
+  pipeline: {
+    total: number;
+    followUps: number;
+    interested: number;
+    open: number;
+  };
   onClose: () => void;
 }) {
   return (
@@ -764,7 +776,7 @@ function EmployeeLeadsModal({
             <MiniStat label="Assigned" value={pipeline.total} />
             <MiniStat label="Open" value={pipeline.open} />
             <MiniStat label="Follow Ups" value={pipeline.followUps} />
-            <MiniStat label="Won" value={pipeline.won} />
+            <MiniStat label="Interested" value={pipeline.interested} />
           </div>
 
           {leads.length === 0 ? (
@@ -789,14 +801,12 @@ function EmployeeLeadsModal({
                         >
                           {(lead.leadStatus || "new").replace("-", " ")}
                         </span>
-                        <span
-                          className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
-                            lead.marked
-                              ? "bg-green-500/10 text-green-600"
-                              : "bg-yellow-500/10 text-yellow-600"
-                          }`}
-                        >
-                          {lead.marked ? "Completed" : "Open"}
+                        <span className="rounded-full bg-yellow-500/10 px-2 py-1 text-[11px] font-semibold text-yellow-600">
+                          {["interested", "not-interested"].includes(
+                            lead.leadStatus || "new",
+                          )
+                            ? "Closed"
+                            : "Open"}
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-[var(--text-secondary)]">
@@ -944,8 +954,7 @@ function statusClass(status: NonNullable<LeadRequest["leadStatus"]>) {
     new: "bg-slate-500/10 text-slate-600",
     contacted: "bg-blue-500/10 text-blue-600",
     "follow-up": "bg-amber-500/10 text-amber-600",
-    qualified: "bg-violet-500/10 text-violet-600",
-    won: "bg-green-500/10 text-green-600",
-    lost: "bg-red-500/10 text-red-600",
+    interested: "bg-green-500/10 text-green-600",
+    "not-interested": "bg-red-500/10 text-red-600",
   }[status];
 }

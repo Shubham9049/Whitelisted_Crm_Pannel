@@ -1,4 +1,5 @@
 const Lead = require("../models/lead.model");
+const { normalizeLeadStatus } = require("../models/lead.model");
 const Employee = require("../models/employee.model");
 const Settings = require("../models/Settings");
 const sendEmail = require("../utils/sendEmail");
@@ -46,6 +47,7 @@ const decorateLead = (lead, options = {}) => {
 
   const decoratedLead = {
     ...plainLead,
+    leadStatus: normalizeLeadStatus(plainLead.leadStatus),
     aging: {
       leadAgeDays: daysSince(plainLead.createdAt) || 0,
       lastContactDays: daysSince(lastActivityAt) || 0,
@@ -322,49 +324,6 @@ exports.getAllLeadActivity = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while fetching lead activity.",
-    });
-  }
-};
-
-/* ============================
-   MARK LEAD AS TRUE
-=============================== */
-exports.markLead = async (req, res) => {
-  const { id } = req.params;
-  const { marked } = req.body;
-
-  try {
-    const includeEmployeeFields = await areEmployeesEnabled();
-
-    if (typeof marked !== "boolean") {
-      return res.status(400).json({
-        message: "Marked value must be boolean",
-      });
-    }
-
-    const lead = await Lead.findById(id);
-
-    if (!lead) {
-      return res.status(404).json({ message: "Lead not found." });
-    }
-
-    lead.marked = marked;
-    lead.lastActivityAt = new Date();
-    lead.activityLog.push({
-      type: "marked",
-      message: marked ? "Lead marked as completed" : "Lead marked as pending",
-    });
-
-    await lead.save();
-
-    res.status(200).json({
-      message: "Lead updated successfully.",
-      lead: decorateLead(lead, { includeEmployeeFields }),
-    });
-  } catch (err) {
-    console.error("Error updating lead:", err);
-    res.status(500).json({
-      message: "Server error while updating lead.",
     });
   }
 };

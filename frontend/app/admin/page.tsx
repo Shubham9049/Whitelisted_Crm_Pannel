@@ -1,20 +1,21 @@
 "use client";
 
 import {
+  AlertCircle,
   ArrowRight,
   Briefcase,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
-  CheckCircle2,
   Clock3,
   FileCheck,
-  Gauge,
   Mail,
   MonitorPlay,
   Newspaper,
+  PhoneCall,
   RefreshCw,
   ShieldCheck,
+  Target,
   TrendingUp,
   UserRoundCheck,
   Users,
@@ -66,13 +67,17 @@ interface DashboardItem {
   phone?: string;
   companyName?: string;
   products?: string[];
-  marked?: boolean;
+  assignedTo?: unknown;
+  followUpDate?: string;
+  leadStatus?: string;
   verified?: boolean;
   isActive?: boolean;
   status?: string;
   careerId?: { title?: string };
   createdAt?: string;
   updatedAt?: string;
+  datePublished?: string;
+  lastUpdated?: string;
   [key: string]: unknown;
 }
 
@@ -292,8 +297,8 @@ function getItemDate(item: DashboardItem) {
   return (
     item.createdAt ||
     item.updatedAt ||
-    (item as any).datePublished ||
-    (item as any).lastUpdated ||
+    item.datePublished ||
+    item.lastUpdated ||
     ""
   );
 }
@@ -323,29 +328,6 @@ function countByStatus(items: DashboardItem[], status: string) {
   return items.filter(
     (item) => String(item.status || "").toLowerCase() === status,
   ).length;
-}
-
-function getItemTitle(item: DashboardItem, fallback: string) {
-  return (
-    item.name ||
-    item.title ||
-    item.subject ||
-    item.email ||
-    item.companyName ||
-    item.careerId?.title ||
-    fallback
-  );
-}
-
-function getItemDetail(item: DashboardItem) {
-  return (
-    item.companyName ||
-    item.email ||
-    item.phone ||
-    item.careerId?.title ||
-    item.status ||
-    "Recently added"
-  );
 }
 
 export default function Dashboard() {
@@ -413,27 +395,39 @@ export default function Dashboard() {
 
   const leadStats = useMemo(() => {
     const leads = dashboard.leads;
+    const openLeads = leads.filter(
+      (lead) =>
+        !["interested", "not-interested"].includes(lead.leadStatus || "new"),
+    );
 
     return {
       total: leads.length,
-      pending: leads.filter((lead) => !lead.marked).length,
-      completed: leads.filter((lead) => lead.marked).length,
+      pending: openLeads.length,
+      completed: leads.filter((lead) =>
+        ["interested", "not-interested"].includes(lead.leadStatus || "new"),
+      ).length,
       verified: leads.filter((lead) => lead.verified).length,
+      unassigned: leads.filter((lead) => !lead.assignedTo).length,
+      followUps: leads.filter((lead) => lead.leadStatus === "follow-up").length,
+      interested: leads.filter((lead) => lead.leadStatus === "interested")
+        .length,
+      notInterested: leads.filter(
+        (lead) => lead.leadStatus === "not-interested",
+      ).length,
+      open: openLeads.length,
       today: countToday(leads),
       thisMonth: countThisMonth(leads),
     };
   }, [dashboard.leads]);
 
-  const chartData = useMemo(() => {
+  const leadChartData = useMemo(() => {
     const counts = new Map<string, number>();
 
-    enabledModules.forEach((module) => {
-      dashboard[module.key].forEach((item) => {
-        const date = getItemDate(item);
-        if (!date) return;
-        const key = dateKey(new Date(date));
-        counts.set(key, (counts.get(key) || 0) + 1);
-      });
+    dashboard.leads.forEach((lead) => {
+      const date = getItemDate(lead);
+      if (!date) return;
+      const key = dateKey(new Date(date));
+      counts.set(key, (counts.get(key) || 0) + 1);
     });
 
     return Array.from({ length: chartDays }, (_, index) => {
@@ -450,22 +444,56 @@ export default function Dashboard() {
         value: counts.get(dateKey(date)) || 0,
       };
     });
-  }, [chartDays, dashboard, enabledModules]);
+  }, [chartDays, dashboard.leads]);
 
-  const recentActivity = useMemo(
+  const leadPipeline = useMemo(() => {
+    const pipeline = [
+      { key: "new", label: "New", value: 0, color: "bg-blue-500" },
+      {
+        key: "contacted",
+        label: "Contacted",
+        value: 0,
+        color: "bg-cyan-500",
+      },
+      {
+        key: "follow-up",
+        label: "Follow Up",
+        value: 0,
+        color: "bg-yellow-500",
+      },
+      {
+        key: "interested",
+        label: "Interested",
+        value: 0,
+        color: "bg-green-500",
+      },
+      {
+        key: "not-interested",
+        label: "Not Interested",
+        value: 0,
+        color: "bg-red-500",
+      },
+    ];
+
+    dashboard.leads.forEach((lead) => {
+      const status = (lead.leadStatus || "new").toLowerCase();
+      const match = pipeline.find((item) => item.key === status);
+      if (match) match.value += 1;
+    });
+
+    return pipeline;
+  }, [dashboard.leads]);
+
+  const latestLeads = useMemo(
     () =>
-      enabledModules
-        .flatMap((module) =>
-          dashboard[module.key].map((item) => ({
-            item,
-            module,
-            date: getItemDate(item),
-          })),
+      [...dashboard.leads]
+        .sort(
+          (a, b) =>
+            new Date(getItemDate(b)).getTime() -
+            new Date(getItemDate(a)).getTime(),
         )
-        .filter((activity) => activity.date)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 8),
-    [dashboard, enabledModules],
+        .slice(0, 5),
+    [dashboard.leads],
   );
 
   const attentionItems = useMemo(
@@ -569,22 +597,13 @@ export default function Dashboard() {
         <EmptyState />
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 md:gap-4">
-            {enabledModules.map((module) => (
-              <StatCard
-                key={module.key}
-                title={module.label}
-                value={dashboard[module.key].length}
-                subtitle={module.subtitle(dashboard[module.key])}
-                icon={module.icon}
-                color={module.color}
-                href={module.href}
-              />
-            ))}
-          </div>
-
           {hasLeads && (
-            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+            <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 md:gap-4">
+              <MiniStat
+                label="Total Leads"
+                value={leadStats.total}
+                icon={<Users size={18} />}
+              />
               <MiniStat
                 label="Leads This Month"
                 value={leadStats.thisMonth}
@@ -597,16 +616,22 @@ export default function Dashboard() {
                 accent="text-yellow-600"
               />
               <MiniStat
-                label="Completed Leads"
-                value={leadStats.completed}
-                icon={<CheckCircle2 size={18} />}
-                accent="text-green-600"
+                label="Unassigned"
+                value={leadStats.unassigned}
+                icon={<AlertCircle size={18} />}
+                accent="text-red-600"
               />
               <MiniStat
-                label="Verified Leads"
-                value={leadStats.verified}
-                icon={<ShieldCheck size={18} />}
-                accent="text-violet-600"
+                label="Follow-ups"
+                value={leadStats.followUps}
+                icon={<PhoneCall size={18} />}
+                accent="text-cyan-600"
+              />
+              <MiniStat
+                label="Interested"
+                value={leadStats.interested}
+                icon={<Target size={18} />}
+                accent="text-green-600"
               />
             </div>
           )}
@@ -618,11 +643,11 @@ export default function Dashboard() {
                   <div className="mb-2 flex items-center gap-2">
                     <TrendingUp size={19} className="text-[var(--primary)]" />
                     <h2 className="font-semibold text-[var(--text-primary)]">
-                      Activity Trend
+                      Lead Intake Trend
                     </h2>
                   </div>
                   <p className="text-xs text-[var(--text-secondary)]">
-                    New records across enabled modules
+                    New leads received in the selected window
                   </p>
                 </div>
 
@@ -644,7 +669,7 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <ActivityChart data={chartData} />
+              <ActivityChart data={leadChartData} />
             </Panel>
 
             <Panel>
@@ -670,6 +695,31 @@ export default function Dashboard() {
                       count={`${leadStats.verified} of ${leadStats.total}`}
                       color="bg-violet-500"
                     />
+                  </div>
+
+                  <div className="mt-8">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">
+                        Pipeline Snapshot
+                      </p>
+                      <Link
+                        href="/admin/lead"
+                        className="flex items-center gap-1 text-xs font-semibold text-[var(--primary)]"
+                      >
+                        Manage <ArrowRight size={13} />
+                      </Link>
+                    </div>
+                    <div className="space-y-3">
+                      {leadPipeline.map((stage) => (
+                        <PipelineRow
+                          key={stage.label}
+                          label={stage.label}
+                          value={stage.value}
+                          total={leadStats.total}
+                          color={stage.color}
+                        />
+                      ))}
+                    </div>
                   </div>
                 </>
               ) : (
@@ -726,86 +776,109 @@ export default function Dashboard() {
             </Panel>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.9fr)]">
-            <div className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)]">
-              <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4 md:px-6">
-                <div>
-                  <h2 className="font-semibold text-[var(--text-primary)]">
-                    Recent Activity
-                  </h2>
-                  <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                    Latest records from enabled modules
-                  </p>
+          {hasLeads && (
+            <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.55fr)]">
+              <Panel>
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="font-semibold text-[var(--text-primary)]">
+                      Lead Priorities
+                    </h2>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                      Work that needs admin attention first
+                    </p>
+                  </div>
+                  <ShieldCheck size={18} className="text-[var(--primary)]" />
                 </div>
-              </div>
-
-              {recentActivity.length > 0 ? (
-                <div className="max-h-[600px] overflow-y-auto divide-y divide-[var(--border)] pr-2">
-                  {" "}
-                  {recentActivity.map(({ item, module, date }, index) => (
-                    <Link
-                      key={`${module.key}-${item._id || item.id || index}`}
-                      href={module.href}
-                      className="flex items-center justify-between gap-4 px-5 py-4 transition hover:bg-[var(--background-secondary)] md:px-6"
-                    >
-                      <div className="min-w-0">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-[var(--background-secondary)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-                            {module.singular}
-                          </span>
-                          <span className="text-xs text-[var(--text-secondary)]">
-                            {new Date(date).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                          {getItemTitle(item, module.singular)}
-                        </p>
-                        <p className="mt-1 truncate text-xs text-[var(--text-secondary)]">
-                          {getItemDetail(item)}
-                        </p>
-                      </div>
-                      <ArrowRight
-                        size={16}
-                        className="shrink-0 text-[var(--text-secondary)]"
-                      />
-                    </Link>
-                  ))}
+                <div className="grid grid-cols-2 gap-3">
+                  <PriorityTile
+                    label="Open"
+                    value={leadStats.open}
+                    tone="text-blue-600"
+                  />
+                  <PriorityTile
+                    label="Unassigned"
+                    value={leadStats.unassigned}
+                    tone="text-red-600"
+                  />
+                  <PriorityTile
+                    label="Verified"
+                    value={leadStats.verified}
+                    tone="text-violet-600"
+                  />
+                  <PriorityTile
+                    label="Not Interested"
+                    value={leadStats.notInterested}
+                    tone="text-slate-600"
+                  />
                 </div>
-              ) : (
-                <div className="p-10 text-center text-sm text-[var(--text-secondary)]">
-                  No activity available for enabled modules yet.
-                </div>
-              )}
-            </div>
+              </Panel>
 
-            <Panel>
-              <h2 className="font-semibold text-[var(--text-primary)]">
-                Enabled Menu
-              </h2>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                Dashboard data follows these settings
-              </p>
-
-              <div className="mt-5 space-y-3">
-                {enabledModules.map((module) => (
+              <Panel>
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="font-semibold text-[var(--text-primary)]">
+                      Latest Leads
+                    </h2>
+                    <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                      Fresh inquiries for quick review and assignment
+                    </p>
+                  </div>
                   <Link
-                    key={module.key}
-                    href={module.href}
-                    className="flex items-center justify-between rounded-lg border border-[var(--border)] p-3 transition hover:bg-[var(--background-secondary)]"
+                    href="/admin/lead"
+                    className="flex items-center gap-1 text-xs font-semibold text-[var(--primary)]"
                   >
-                    <span className="flex min-w-0 items-center gap-3 text-sm font-medium">
-                      <span className="text-[var(--primary)]">
-                        {module.icon}
-                      </span>
-                      <span className="truncate">{module.label}</span>
-                    </span>
-                    <span className="text-sm font-bold">
-                      {dashboard[module.key].length}
-                    </span>
+                    View all <ArrowRight size={13} />
                   </Link>
-                ))}
+                </div>
+                <div className="space-y-3">
+                  {latestLeads.length ? (
+                    latestLeads.map((lead) => (
+                      <LatestLeadRow
+                        key={
+                          lead._id ||
+                          lead.id ||
+                          lead.email ||
+                          lead.phone ||
+                          getItemDate(lead)
+                        }
+                        lead={lead}
+                      />
+                    ))
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-[var(--border)] p-5 text-center text-sm text-[var(--text-secondary)]">
+                      No leads have arrived yet.
+                    </p>
+                  )}
+                </div>
+              </Panel>
+            </div>
+          )}
+
+          <div className="mb-6">
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <div>
+                <h2 className="font-semibold text-[var(--text-primary)]">
+                  Module Overview
+                </h2>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {totalRecords} records across enabled CRM sections
+                </p>
               </div>
-            </Panel>
+            </div>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6 md:gap-4">
+              {enabledModules.map((module) => (
+                <StatCard
+                  key={module.key}
+                  title={module.label}
+                  value={dashboard[module.key].length}
+                  subtitle={module.subtitle(dashboard[module.key])}
+                  icon={module.icon}
+                  color={module.color}
+                  href={module.href}
+                />
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -838,6 +911,87 @@ function Panel({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+function PipelineRow({
+  label,
+  value,
+  total,
+  color,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  color: string;
+}) {
+  const width = total ? Math.max(6, Math.round((value / total) * 100)) : 0;
+
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+        <span className="font-medium text-[var(--text-secondary)]">
+          {label}
+        </span>
+        <span className="font-bold text-[var(--text-primary)]">{value}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-[var(--background-secondary)]">
+        <div
+          className={`h-full rounded-full ${color}`}
+          style={{ width: `${width}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PriorityTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: string;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--background-secondary)] p-4">
+      <p className={`text-2xl font-bold ${tone}`}>{value}</p>
+      <p className="mt-1 text-xs text-[var(--text-secondary)]">{label}</p>
+    </div>
+  );
+}
+
+function LatestLeadRow({ lead }: { lead: DashboardItem }) {
+  return (
+    <Link
+      href="/admin/lead"
+      className="flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--background-secondary)] px-4 py-3 transition hover:border-[var(--primary)]"
+    >
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-[var(--text-primary)]">
+          {lead.name || lead.companyName || "Unnamed Lead"}
+        </p>
+        <p className="mt-1 truncate text-xs text-[var(--text-secondary)]">
+          {lead.email || lead.phone || "No contact detail"} ·{" "}
+          {formatCompactDate(getItemDate(lead))}
+        </p>
+      </div>
+      <span className="shrink-0 rounded-full bg-[var(--card)] px-3 py-1 text-xs font-semibold capitalize text-[var(--primary)]">
+        {lead.leadStatus || "new"}
+      </span>
+    </Link>
+  );
+}
+
+function formatCompactDate(value?: string) {
+  if (!value) return "No date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No date";
+
+  return date.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 function ActivityChart({
@@ -874,10 +1028,10 @@ function ActivityChart({
           viewBox={`0 0 ${width} ${height}`}
           className="h-auto min-h-[220px] w-full"
           role="img"
-          aria-label="Activity trend chart"
+          aria-label="Lead intake trend chart"
         >
           <defs>
-            <linearGradient id="activityArea" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="leadArea" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.3" />
               <stop
                 offset="100%"
@@ -914,7 +1068,7 @@ function ActivityChart({
             );
           })}
 
-          <polygon points={areaPoints} fill="url(#activityArea)" />
+          <polygon points={areaPoints} fill="url(#leadArea)" />
           <polyline
             points={linePoints}
             fill="none"
@@ -935,7 +1089,7 @@ function ActivityChart({
                 strokeWidth="2.5"
               >
                 <title>
-                  {point.label}: {point.value} records
+                  {point.label}: {point.value} leads
                 </title>
               </circle>
               {(index % labelInterval === 0 || index === points.length - 1) && (
@@ -956,10 +1110,10 @@ function ActivityChart({
 
       <div className="mt-1 flex items-center justify-between border-t border-[var(--border)] pt-4 text-xs text-[var(--text-secondary)]">
         <span>
-          {data.reduce((sum, item) => sum + item.value, 0)} total records
+          {data.reduce((sum, item) => sum + item.value, 0)} total leads
         </span>
         <span>
-          Peak: {Math.max(...data.map((item) => item.value), 0)} per day
+          Peak: {Math.max(...data.map((item) => item.value), 0)} leads/day
         </span>
       </div>
     </div>
@@ -1024,43 +1178,6 @@ function MiniStat({
           {value}
         </p>
       </div>
-    </div>
-  );
-}
-
-function SummaryCard({
-  title,
-  value,
-  subtitle,
-  icon,
-  color,
-}: {
-  title: string;
-  value: number;
-  subtitle: string;
-  icon: ReactNode;
-  color: ModuleColor;
-}) {
-  return (
-    <div
-      className={`rounded-lg border bg-gradient-to-br p-4 ${cardStyles[color].card}`}
-    >
-      <div className="mb-4 flex items-start justify-between gap-2">
-        <div
-          className={`flex h-10 w-10 items-center justify-center rounded-lg ${cardStyles[color].icon}`}
-        >
-          {icon}
-        </div>
-      </div>
-      <p className="text-xs uppercase tracking-wider text-[var(--text-secondary)]">
-        {title}
-      </p>
-      <p className={`mt-2 text-3xl font-bold ${cardStyles[color].value}`}>
-        {value}
-      </p>
-      <p className="mt-1 text-[11px] text-[var(--text-secondary)]">
-        {subtitle}
-      </p>
     </div>
   );
 }

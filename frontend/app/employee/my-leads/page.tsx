@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Cookies from "js-cookie";
 import {
   Search,
   RefreshCw,
@@ -27,7 +26,6 @@ interface Lead {
   message?: string;
   leadStatus?: string;
   verified?: boolean;
-  marked?: boolean;
   createdAt: string;
 }
 
@@ -39,11 +37,6 @@ export default function MyLeadsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [error, setError] = useState("");
-
-  const employee =
-    typeof window !== "undefined"
-      ? JSON.parse(Cookies.get("employee") || "{}")
-      : {};
 
   const fetchLeads = async () => {
     try {
@@ -71,9 +64,11 @@ export default function MyLeadsPage() {
     }
   };
 
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
   useEffect(() => {
     fetchLeads();
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -97,19 +92,20 @@ export default function MyLeadsPage() {
 
     return {
       total,
-      won: leads.filter((l) => l.leadStatus === "won").length,
+      interested: leads.filter((l) => l.leadStatus === "interested").length,
       contacted: leads.filter((l) => l.leadStatus === "contacted").length,
       followup: leads.filter((l) => l.leadStatus === "follow-up").length,
-      lost: leads.filter((l) => l.leadStatus === "lost").length,
+      notInterested: leads.filter((l) => l.leadStatus === "not-interested")
+        .length,
     };
   }, [leads]);
 
   const getStatusClass = (status: string) => {
     switch (status) {
-      case "won":
+      case "interested":
         return "bg-green-500/10 text-green-500";
 
-      case "lost":
+      case "not-interested":
         return "bg-red-500/10 text-red-500";
 
       case "contacted":
@@ -117,9 +113,6 @@ export default function MyLeadsPage() {
 
       case "follow-up":
         return "bg-yellow-500/10 text-yellow-500";
-
-      case "qualified":
-        return "bg-purple-500/10 text-purple-500";
 
       default:
         return "bg-[var(--primary)]/10 text-[var(--primary)]";
@@ -205,11 +198,15 @@ export default function MyLeadsPage() {
           icon={<Clock3 size={20} />}
         />
 
-        <StatCard title="Won" value={stats.won} icon={<Trophy size={20} />} />
+        <StatCard
+          title="Interested"
+          value={stats.interested}
+          icon={<Trophy size={20} />}
+        />
 
         <StatCard
-          title="Lost"
-          value={stats.lost}
+          title="Not Interested"
+          value={stats.notInterested}
           icon={<TrendingDown size={20} />}
         />
       </div>
@@ -276,9 +273,8 @@ export default function MyLeadsPage() {
               <option value="new">New</option>
               <option value="contacted">Contacted</option>
               <option value="follow-up">Follow Up</option>
-              <option value="qualified">Qualified</option>
-              <option value="won">Won</option>
-              <option value="lost">Lost</option>
+              <option value="interested">Interested</option>
+              <option value="not-interested">Not Interested</option>
             </select>
           </div>
 

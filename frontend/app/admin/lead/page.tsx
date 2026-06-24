@@ -24,9 +24,8 @@ type LeadStatus =
   | "new"
   | "contacted"
   | "follow-up"
-  | "qualified"
-  | "won"
-  | "lost";
+  | "interested"
+  | "not-interested";
 
 interface Employee {
   _id: string;
@@ -55,7 +54,6 @@ interface LeadRequest {
   phone: string;
   customFields?: Record<string, string | number | boolean>;
   message?: string;
-  marked?: boolean;
   verified?: boolean;
   leadStatus?: LeadStatus;
   source?: string;
@@ -73,9 +71,8 @@ const statusOptions: Array<"all" | LeadStatus> = [
   "new",
   "contacted",
   "follow-up",
-  "qualified",
-  "won",
-  "lost",
+  "interested",
+  "not-interested",
 ];
 
 const ITEMS_PER_PAGE = 20;
@@ -186,11 +183,16 @@ export default function AdminLead() {
         ? leads.filter((lead) => !lead.assignedTo).length
         : 0,
       followUps: leads.filter((lead) => lead.leadStatus === "follow-up").length,
-      won: leads.filter((lead) => lead.leadStatus === "won").length,
-      lost: leads.filter((lead) => lead.leadStatus === "lost").length,
+      interested: leads.filter((lead) => lead.leadStatus === "interested")
+        .length,
+      notInterested: leads.filter(
+        (lead) => lead.leadStatus === "not-interested",
+      ).length,
       verified: leads.filter((lead) => lead.verified).length,
-      pending: leads.filter((lead) => !lead.marked).length,
-      completed: leads.filter((lead) => lead.marked).length,
+      open: leads.filter(
+        (lead) =>
+          !["interested", "not-interested"].includes(lead.leadStatus || "new"),
+      ).length,
     }),
     [leads, showAssignment],
   );
@@ -251,7 +253,7 @@ export default function AdminLead() {
         ...customFieldKeys,
         ...(showAssignment
           ? ["Status", "Assigned To", "Next Follow Up"]
-          : ["Verified", "Completed", "Submitted At"]),
+          : ["Verified", "Status", "Submitted At"]),
       ],
       ...filteredLeads.map((lead) => [
         lead.name,
@@ -266,7 +268,7 @@ export default function AdminLead() {
             ]
           : [
               lead.verified ? "Yes" : "No",
-              lead.marked ? "Yes" : "No",
+              lead.leadStatus || "new",
               formatDateTime(lead.createdAt),
             ]),
       ]),
@@ -329,7 +331,7 @@ export default function AdminLead() {
 
       <div
         className={`mb-6 grid grid-cols-2 gap-3 ${
-          showAssignment ? "lg:grid-cols-6" : "lg:grid-cols-4"
+          showAssignment ? "lg:grid-cols-6" : "lg:grid-cols-3"
         }`}
       >
         <Stat
@@ -363,14 +365,14 @@ export default function AdminLead() {
               tone="violet"
             />
             <Stat
-              label="Won"
-              value={stats.won}
+              label="Interested"
+              value={stats.interested}
               icon={<CheckCircle2 size={18} />}
               tone="emerald"
             />
             <Stat
-              label="Lost"
-              value={stats.lost}
+              label="Not Interested"
+              value={stats.notInterested}
               icon={<RxCrossCircled size={18} />}
               tone="rose"
             />
@@ -384,16 +386,10 @@ export default function AdminLead() {
               tone="emerald"
             />
             <Stat
-              label="Pending"
-              value={stats.pending}
+              label="Open"
+              value={stats.open}
               icon={<Filter size={18} />}
               tone="amber"
-            />
-            <Stat
-              label="Completed"
-              value={stats.completed}
-              icon={<CheckCircle2 size={18} />}
-              tone="green"
             />
           </>
         )}
@@ -525,11 +521,11 @@ export default function AdminLead() {
                               Verified
                             </span>
                           )}
-                          {lead.marked && (
-                            <span className="rounded-full bg-green-500/10 px-2 py-1 text-xs font-semibold text-green-600">
-                              Completed
-                            </span>
-                          )}
+                          <span
+                            className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass(lead.leadStatus || "new")}`}
+                          >
+                            {(lead.leadStatus || "new").replace("-", " ")}
+                          </span>
                         </div>
                       </td>
                     )}
@@ -689,7 +685,10 @@ function LeadModal({
                 <Info label="Phone" value={lead.phone} />
                 <Info label="Source" value={lead.source || "Website"} />
                 <Info label="Verified" value={lead.verified ? "Yes" : "No"} />
-                <Info label="Completed" value={lead.marked ? "Yes" : "No"} />
+                <Info
+                  label="Status"
+                  value={(lead.leadStatus || "new").replace("-", " ")}
+                />
                 <Info
                   label="Submitted"
                   value={formatDateTime(lead.createdAt)}
@@ -884,8 +883,7 @@ function statusClass(status: LeadStatus) {
     new: "bg-slate-500/10 text-slate-600",
     contacted: "bg-blue-500/10 text-blue-600",
     "follow-up": "bg-amber-500/10 text-amber-600",
-    qualified: "bg-violet-500/10 text-violet-600",
-    won: "bg-green-500/10 text-green-600",
-    lost: "bg-red-500/10 text-red-600",
+    interested: "bg-green-500/10 text-green-600",
+    "not-interested": "bg-red-500/10 text-red-600",
   }[status];
 }
