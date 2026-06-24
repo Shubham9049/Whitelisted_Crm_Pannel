@@ -10,6 +10,7 @@ import {
   FaLinkedinIn,
   FaYoutube,
 } from "react-icons/fa";
+import { useSettings } from "../context/SettingsContext";
 
 const footerProducts = [
   {
@@ -99,6 +100,7 @@ export default function Footer() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
+  const { settings } = useSettings();
 
   const handleSubscribe = async () => {
     if (!email) {
@@ -144,6 +146,8 @@ export default function Footer() {
       }, 5000);
     }
   };
+  const logoUrl = settings?.branding?.logo || "/logo.png";
+
   return (
     <footer className="relative bg-[#03111F] overflow-hidden">
       {/* GRADIENT OVERLAY */}
@@ -230,7 +234,13 @@ export default function Footer() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-12">
             {/* LOGO */}
             <div>
-              <Image src="/hp-logo.png" alt="logo" width={200} height={80} />
+              <Image
+                src={logoUrl}
+                alt="logo"
+                width={140}
+                height={100}
+                className="object-contain"
+              />
 
               <p className="text-gray-400 leading-[30px] mt-6 text-sm">
                 HPMC is a leading manufacturer of extrusion and recycling

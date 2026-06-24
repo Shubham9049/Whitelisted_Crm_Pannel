@@ -119,7 +119,7 @@ export default function AdminLayout({
 
     return settings?.modules?.[item.key];
   });
-  const logoUrl = settings?.branding?.logo || "/hp-logo.png";
+  const logoUrl = settings?.branding?.logo || "/logo.png";
   const handleLogout = () => {
     Cookies.remove("adminAuth");
     router.push("/login");
@@ -166,7 +166,13 @@ export default function AdminLayout({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
-            <Image src="/hp-logo.png" alt="logo" width={40} height={40} />
+            <Image
+              src={logoUrl}
+              alt="logo"
+              width={40}
+              height={40}
+              className="object-contain"
+            />
 
             <span className="text-lg font-semibold text-[var(--text)]">
               Admin
