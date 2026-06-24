@@ -39,6 +39,7 @@ interface Lead {
   companyName: string;
   phone: string;
   email: string;
+  customFields?: Record<string, string | number | boolean | string[]>;
   products?: string[];
   message?: string;
   leadStatus: string;
@@ -83,6 +84,8 @@ export default function LeadDetailsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
+      console.log("Employee Details API", data);
+      console.log("Custom Fields", data?.lead?.customFields);
       if (!res.ok || !data.success)
         throw new Error(data.message || "Lead not found");
 
@@ -259,6 +262,22 @@ export default function LeadDetailsPage() {
               </p>
             </div>
           </Panel>
+
+          <Panel title="Custom Fields" icon={<CheckCircle2 size={18} />}>
+            {lead.customFields && Object.keys(lead.customFields).length ? (
+              Object.entries(lead.customFields).map(([key, value]) => (
+                <Info
+                  key={key}
+                  label={formatCustomFieldLabel(key)}
+                  value={formatFieldValue(value)}
+                />
+              ))
+            ) : (
+              <p className="md:col-span-2 text-sm text-[var(--text-secondary)]">
+                No custom fields captured.
+              </p>
+            )}
+          </Panel>
         </div>
 
         <div className="space-y-6">
@@ -408,6 +427,20 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="mt-1 break-words font-medium">{value}</p>
     </div>
   );
+}
+
+function formatFieldValue(value: unknown) {
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "-";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value === undefined || value === null || value === "") return "-";
+  return String(value);
+}
+
+function formatCustomFieldLabel(value: string) {
+  return value
+    .replace(/([A-Z])/g, " $1")
+    .replace(/[-_]/g, " ")
+    .replace(/^./, (char) => char.toUpperCase());
 }
 
 function Badge({ value }: { value: string }) {

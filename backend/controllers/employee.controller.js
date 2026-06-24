@@ -1,9 +1,6 @@
 const Employee = require("../models/employee.model");
 const Lead = require("../models/lead.model");
-const {
-  LEAD_STATUSES,
-  normalizeLeadStatus,
-} = require("../models/lead.model");
+const { LEAD_STATUSES, normalizeLeadStatus } = require("../models/lead.model");
 const bcrypt = require("bcryptjs");
 
 const jwt = require("jsonwebtoken");
@@ -60,7 +57,9 @@ const getLeadStatus = (lead) => normalizeLeadStatus(lead.leadStatus);
 
 const decorateLead = (lead) => {
   const plainLead =
-    typeof lead.toObject === "function" ? lead.toObject() : lead;
+    typeof lead.toObject === "function"
+      ? lead.toObject({ flattenMaps: true })
+      : lead;
   const lastActivityAt =
     plainLead.lastActivityAt || plainLead.assignedAt || plainLead.createdAt;
   const lastFollowUpActivity = [...(plainLead.activityLog || [])]
@@ -95,9 +94,7 @@ const buildWorkDesk = (leads) => {
   const overdue = followUps.filter(
     (lead) => new Date(lead.followUpDate).getTime() < todayStart,
   );
-  const newLeads = openLeads.filter(
-    (lead) => getLeadStatus(lead) === "new",
-  );
+  const newLeads = openLeads.filter((lead) => getLeadStatus(lead) === "new");
   const siteVisits = openLeads.filter(
     (lead) =>
       (lead.products || []).some((product) =>
@@ -732,7 +729,7 @@ exports.getLeadById = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      lead,
+      lead: decorateLead(lead),
     });
   } catch (error) {
     console.error(error);

@@ -453,7 +453,7 @@ export default function AdminLead() {
                     "Lead",
                     "Contact",
                     ...(showAssignment
-                      ? ["Status", "Assigned To", "Next Follow Up"]
+                      ? ["Status", "Assigned To"]
                       : ["Submitted"]),
                     "Actions",
                   ].map((head) => (
@@ -529,22 +529,7 @@ export default function AdminLead() {
                         </div>
                       </td>
                     )}
-                    {showAssignment && (
-                      <td className="px-5 py-4 text-sm">
-                        {lead.followUpDate ? (
-                          <>
-                            <p>{formatDateTime(lead.followUpDate)}</p>
-                            <p className="mt-1 max-w-[220px] truncate text-[var(--text-secondary)]">
-                              {lead.followUpRemark}
-                            </p>
-                          </>
-                        ) : (
-                          <span className="text-[var(--text-secondary)]">
-                            Not scheduled
-                          </span>
-                        )}
-                      </td>
-                    )}
+
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-2">
                         <a
@@ -697,7 +682,7 @@ function LeadModal({
                   <>
                     <Info label="Status" value={lead.leadStatus || "new"} />
                     <Info
-                      label="Next Follow Up"
+                      label=" Follow Up"
                       value={formatDateTime(lead.followUpDate) || "-"}
                     />
                   </>
