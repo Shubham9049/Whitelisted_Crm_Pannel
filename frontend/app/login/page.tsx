@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import Cookies from "js-cookie";
 import Navbar from "../components/Navbar";
-import Footer from "../components/Footer";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -284,8 +283,6 @@ export default function LoginPage() {
           </div>
         </div>
       </section>
-
-      <Footer />
     </div>
   );
 }

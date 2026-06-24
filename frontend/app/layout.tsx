@@ -1,3 +1,4 @@
+import { ThemeProvider } from "./components/theme-provider";
 import { SettingsProvider } from "./context/SettingsContext";
 import "./globals.css";
 
@@ -9,7 +10,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <SettingsProvider>{children}</SettingsProvider>
+        <SettingsProvider>
+          <ThemeProvider> {children}</ThemeProvider>
+        </SettingsProvider>
       </body>
     </html>
   );

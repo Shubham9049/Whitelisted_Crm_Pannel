@@ -9,7 +9,6 @@ import { useEffect, useState } from "react";
 
 import LanguageSelector from "./LanguageSelector";
 import ThemeToggle from "./Theme-toggle";
-import PopupForm from "./Popup";
 import { usePathname } from "next/navigation";
 import { useSettings } from "../context/SettingsContext";
 
@@ -180,7 +179,6 @@ export default function Navbar() {
           </div>
         </div>
       </div>
-      <PopupForm open={openPopup} onClose={() => setOpenPopup(false)} />
     </>
   );
 }
