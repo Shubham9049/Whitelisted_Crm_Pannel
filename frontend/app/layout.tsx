@@ -10,9 +10,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <SettingsProvider>
-          <ThemeProvider> {children}</ThemeProvider>
-        </SettingsProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <SettingsProvider>{children}</SettingsProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
