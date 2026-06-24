@@ -1,9 +1,10 @@
 const Lead = require("../models/lead.model");
-const { normalizeLeadStatus } = require("../models/lead.model");
+const { normalizeLeadStatus, LEAD_STATUSES } = require("../models/lead.model");
 const Employee = require("../models/employee.model");
 const Settings = require("../models/Settings");
 const sendEmail = require("../utils/sendEmail");
 const { normalizeLeadCustomFieldValues } = require("../utils/leadFormConfig");
+const XLSX = require("xlsx");
 
 const otpStore = new Map(); // temporary in-memory storage
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -71,6 +72,108 @@ const decorateLead = (lead, options = {}) => {
   }
 
   return decoratedLead;
+};
+
+const normalizeHeader = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+
+const getRowValue = (row, aliases) => {
+  for (const alias of aliases) {
+    const normalizedAlias = normalizeHeader(alias);
+    const key = Object.keys(row).find(
+      (rowKey) => normalizeHeader(rowKey) === normalizedAlias,
+    );
+
+    if (key && row[key] !== undefined && row[key] !== null) {
+      const value = String(row[key]).trim();
+      if (value) return value;
+    }
+  }
+
+  return "";
+};
+
+const parseBoolean = (value) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["true", "yes", "y", "1", "verified"].includes(normalized)) return true;
+  if (["false", "no", "n", "0", "unverified"].includes(normalized))
+    return false;
+  return false;
+};
+
+const parseDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const isObjectId = (value) => /^[a-f\d]{24}$/i.test(String(value || ""));
+
+const buildEmployeeLookup = async () => {
+  const employees = await Employee.find({ active: true }).select("name email");
+  const lookup = new Map();
+
+  employees.forEach((employee) => {
+    lookup.set(String(employee._id), employee._id);
+    lookup.set(employee.email.toLowerCase(), employee._id);
+    lookup.set(employee.name.trim().toLowerCase(), employee._id);
+  });
+
+  return lookup;
+};
+
+const importReservedHeaders = new Set(
+  [
+    "name",
+    "fullname",
+    "customername",
+    "leadname",
+    "email",
+    "emailaddress",
+    "phone",
+    "mobile",
+    "mobileno",
+    "mobilephone",
+    "phonenumber",
+    "contact",
+    "contactnumber",
+    "message",
+    "remark",
+    "remarks",
+    "notes",
+    "source",
+    "status",
+    "leadstatus",
+    "verified",
+    "assignedto",
+    "assignedemployee",
+    "employee",
+    "employeeemail",
+    "employeeid",
+    "followupdate",
+    "nextfollowup",
+    "followupremark",
+  ].map(normalizeHeader),
+);
+
+const readWorkbookRows = (file) => {
+  const workbook = XLSX.read(file.buffer, {
+    type: "buffer",
+    cellDates: true,
+  });
+  const firstSheet = workbook.SheetNames[0];
+
+  if (!firstSheet) return [];
+
+  return XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], {
+    defval: "",
+    raw: false,
+  });
 };
 
 /* ============================
@@ -324,6 +427,161 @@ exports.getAllLeadActivity = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while fetching lead activity.",
+    });
+  }
+};
+
+exports.importLeads = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "CSV or Excel file is required",
+      });
+    }
+
+    const rows = readWorkbookRows(req.file);
+
+    if (!rows.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No rows found in uploaded file",
+      });
+    }
+
+    const includeEmployeeFields = await areEmployeesEnabled();
+    const employeeLookup = includeEmployeeFields
+      ? await buildEmployeeLookup()
+      : new Map();
+    const leadsToInsert = [];
+    const errors = [];
+
+    rows.forEach((row, index) => {
+      const rowNumber = index + 2;
+      const name = getRowValue(row, [
+        "name",
+        "full name",
+        "customer name",
+        "lead name",
+      ]);
+      const email = getRowValue(row, ["email", "email address"]);
+      const phone = getRowValue(row, [
+        "phone",
+        "phone number",
+        "mobile",
+        "mobile no",
+        "contact",
+        "contact number",
+      ]);
+
+      if (!name || !email || !phone) {
+        errors.push({
+          row: rowNumber,
+          message: "Name, email and phone are required",
+        });
+        return;
+      }
+
+      const rawStatus = getRowValue(row, ["status", "lead status"]);
+      const leadStatus = normalizeLeadStatus(rawStatus.toLowerCase());
+      const assignedValue = getRowValue(row, [
+        "assigned to",
+        "assigned employee",
+        "employee",
+        "employee email",
+        "employee id",
+      ]);
+      const assignedTo =
+        includeEmployeeFields && assignedValue
+          ? employeeLookup.get(assignedValue.trim().toLowerCase()) ||
+            (isObjectId(assignedValue) ? employeeLookup.get(assignedValue) : null)
+          : null;
+
+      if (includeEmployeeFields && assignedValue && !assignedTo) {
+        errors.push({
+          row: rowNumber,
+          message: `Active employee not found for "${assignedValue}"`,
+        });
+        return;
+      }
+
+      const customFields = {};
+      Object.entries(row).forEach(([key, value]) => {
+        if (importReservedHeaders.has(normalizeHeader(key))) return;
+        if (value === undefined || value === null || String(value).trim() === "")
+          return;
+        customFields[key.trim()] = value;
+      });
+
+      const followUpDate = parseDate(
+        getRowValue(row, ["follow up date", "next follow up"]),
+      );
+      const now = new Date();
+
+      leadsToInsert.push({
+        name,
+        email: email.toLowerCase(),
+        phone,
+        message: getRowValue(row, ["message", "remark", "remarks", "notes"]),
+        source: getRowValue(row, ["source"]) || "Imported",
+        verified: parseBoolean(getRowValue(row, ["verified"])),
+        leadStatus,
+        customFields,
+        assignedTo,
+        assignedAt: assignedTo ? now : null,
+        followUpDate,
+        followUpRemark: getRowValue(row, ["follow up remark"]),
+        lastActivityAt: now,
+        activityLog: [
+          {
+            type: "created",
+            message: "Lead imported from spreadsheet",
+          },
+          ...(assignedTo
+            ? [
+                {
+                  type: "assigned",
+                  employee: assignedTo,
+                  message: "Lead assigned during import",
+                },
+              ]
+            : []),
+          ...(LEAD_STATUSES.includes(leadStatus) && leadStatus !== "new"
+            ? [
+                {
+                  type: "status",
+                  message: `Lead status set to ${leadStatus} during import`,
+                },
+              ]
+            : []),
+        ],
+      });
+    });
+
+    if (!leadsToInsert.length) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid leads found to import",
+        errors,
+      });
+    }
+
+    const insertedLeads = await Lead.insertMany(leadsToInsert, {
+      ordered: false,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `${insertedLeads.length} leads imported successfully`,
+      imported: insertedLeads.length,
+      skipped: errors.length,
+      errors,
+    });
+  } catch (error) {
+    console.error("Lead Import Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while importing leads",
     });
   }
 };

@@ -12,11 +12,12 @@ import {
   RotateCcw,
   Search,
   Trash2,
+  Upload,
   UserRoundCheck,
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RxCrossCircled } from "react-icons/rx";
 import { useSettings } from "../../context/SettingsContext";
 
@@ -102,6 +103,10 @@ export default function AdminLead() {
     useState<(typeof statusOptions)[number]>("all");
   const [assignmentFilter, setAssignmentFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
+  const [showImportModal, setShowImportModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -288,6 +293,97 @@ export default function AdminLead() {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleDownloadSample = () => {
+    const rows = [
+      [
+        "name",
+        "email",
+        "phone",
+        "message",
+        "source",
+        "status",
+        "verified",
+        "company",
+        "budget",
+      ],
+      [
+        "Rahul Sharma",
+        "rahul@example.com",
+        "9876543210",
+        "Interested in product demo",
+        "Facebook",
+        "new",
+        "yes",
+        "Acme Pvt Ltd",
+        "50000",
+      ],
+    ];
+    const csv = rows
+      .map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
+      )
+      .join("\n");
+    const url = window.URL.createObjectURL(
+      new Blob([csv], { type: "text/csv" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "lead-import-sample.csv";
+    link.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleImportFile = async (file?: File) => {
+    if (!file) return;
+
+    const allowedExtensions = [".csv", ".xls", ".xlsx"];
+    const isAllowed = allowedExtensions.some((extension) =>
+      file.name.toLowerCase().endsWith(extension),
+    );
+
+    if (!isAllowed) {
+      alert("Please upload a CSV, XLS or XLSX file.");
+      return;
+    }
+
+    setImporting(true);
+    setImportMessage("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${API_BASE}/lead/import`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        const firstError = data.errors?.[0]?.message
+          ? ` First issue: Row ${data.errors[0].row} - ${data.errors[0].message}`
+          : "";
+        alert(`${data.message || "Import failed."}${firstError}`);
+        return;
+      }
+
+      setImportMessage(
+        `${data.imported || 0} leads imported${
+          data.skipped ? `, ${data.skipped} rows skipped` : ""
+        }.`,
+      );
+      setShowImportModal(false);
+      setCurrentPage(1);
+      await fetchData();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to import leads. Please try again.");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const resetFilters = () => {
     setSearchQuery("");
     setStatusFilter("all");
@@ -312,6 +408,20 @@ export default function AdminLead() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.xls,.xlsx"
+            className="hidden"
+            onChange={(e) => handleImportFile(e.target.files?.[0])}
+          />
+          <button
+            onClick={() => setShowImportModal(true)}
+            disabled={importing}
+            className="flex h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 font-medium disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Upload size={17} /> {importing ? "Importing..." : "Import"}
+          </button>
           <button
             onClick={handleExport}
             className="flex h-11 items-center gap-2 rounded-xl bg-[var(--primary)] px-5 font-medium text-white"
@@ -328,6 +438,12 @@ export default function AdminLead() {
           )}
         </div>
       </div>
+
+      {importMessage && (
+        <div className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-700">
+          {importMessage}
+        </div>
+      )}
 
       <div
         className={`mb-6 grid grid-cols-2 gap-3 ${
@@ -616,6 +732,83 @@ export default function AdminLead() {
           onAssign={handleAssignLead}
         />
       )}
+
+      {showImportModal && (
+        <ImportModal
+          importing={importing}
+          onClose={() => setShowImportModal(false)}
+          onDownloadSample={handleDownloadSample}
+          onChooseFile={() => fileInputRef.current?.click()}
+        />
+      )}
+    </div>
+  );
+}
+
+function ImportModal({
+  importing,
+  onClose,
+  onDownloadSample,
+  onChooseFile,
+}: {
+  importing: boolean;
+  onClose: () => void;
+  onDownloadSample: () => void;
+  onChooseFile: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+      <div className="w-full max-w-xl rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p className="mb-1 text-xs uppercase tracking-[3px] text-[var(--primary)]">
+              Bulk Import
+            </p>
+            <h2 className="font-serif text-3xl">Import Leads</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="grid h-10 w-10 place-items-center rounded-xl border border-[var(--border)]"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="rounded-xl bg-[var(--background-secondary)] p-4 text-sm leading-6 text-[var(--text-secondary)]">
+          <p className="font-semibold text-[var(--text-primary)]">
+            File format
+          </p>
+          <p className="mt-2">
+            Upload a CSV, XLS, or XLSX file. Required columns are{" "}
+            <strong>name</strong>, <strong>email</strong>, and{" "}
+            <strong>phone</strong>.
+          </p>
+          <p className="mt-2">
+            Optional columns: message, source, status, verified.
+          </p>
+          <p className="mt-2">
+            Status can be new, contacted, follow-up, interested, or
+            not-interested. Extra columns like company or budget are saved as
+            custom fields.
+          </p>
+        </div>
+
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <button
+            onClick={onDownloadSample}
+            className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 font-medium"
+          >
+            <Download size={17} /> Download Sample
+          </button>
+          <button
+            onClick={onChooseFile}
+            disabled={importing}
+            className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-4 font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Upload size={17} /> {importing ? "Importing..." : "Choose File"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -670,10 +863,7 @@ function LeadModal({
                 <Info label="Phone" value={lead.phone} />
                 <Info label="Source" value={lead.source || "Website"} />
                 <Info label="Verified" value={lead.verified ? "Yes" : "No"} />
-                <Info
-                  label="Status"
-                  value={(lead.leadStatus || "new").replace("-", " ")}
-                />
+
                 <Info
                   label="Submitted"
                   value={formatDateTime(lead.createdAt)}
