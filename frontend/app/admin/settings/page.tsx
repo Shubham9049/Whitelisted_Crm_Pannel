@@ -23,7 +23,8 @@ import {
 const moduleCategories = [
   {
     title: "Overview",
-    description: "Capture, qualify, and follow up with incoming prospects.",
+    description:
+      "Get a complete snapshot of your business with key metrics, performance insights, and recent activity in one place.",
     modules: [{ key: "analytics", label: "Analytics" }],
   },
   {
@@ -285,7 +286,7 @@ export default function SettingsPage() {
       <div className="mb-8 flex items-center justify-between">
         <div>
           <p className="mb-2 text-xs uppercase tracking-[4px] text-[var(--primary)]">
-            White Label CRM
+            Admin Panel
           </p>
           <h1 className="font-serif text-4xl text-[var(--text-primary)]">
             Settings
