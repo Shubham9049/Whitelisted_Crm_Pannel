@@ -16,7 +16,15 @@ const leadFormFieldSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: ["text", "textarea", "email", "number", "select", "checkbox", "date"],
+      enum: [
+        "text",
+        "textarea",
+        "email",
+        "number",
+        "select",
+        "checkbox",
+        "date",
+      ],
       default: "text",
     },
 
@@ -63,11 +71,6 @@ const settingsSchema = new mongoose.Schema({
       default: true,
     },
 
-    articles: {
-      type: Boolean,
-      default: false,
-    },
-
     agents: {
       type: Boolean,
       default: true,
@@ -91,11 +94,6 @@ const settingsSchema = new mongoose.Schema({
     clients: {
       type: Boolean,
       default: true,
-    },
-
-    testimonials: {
-      type: Boolean,
-      default: false,
     },
 
     vendors: {

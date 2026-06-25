@@ -36,7 +36,6 @@ const moduleCategories = [
       { key: "subscribers", label: "Subscribers" },
       { key: "newsletter", label: "Newsletter" },
       { key: "blogs", label: "Blogs" },
-      { key: "articles", label: "Articles", planned: true },
     ],
   },
   {
@@ -50,10 +49,7 @@ const moduleCategories = [
   {
     title: "Brand Trust",
     description: "Showcase customers and social proof across the website.",
-    modules: [
-      { key: "clients", label: "Clients" },
-      { key: "testimonials", label: "Testimonials", planned: true },
-    ],
+    modules: [{ key: "clients", label: "Clients" }],
   },
   {
     title: "Network",
@@ -405,15 +401,9 @@ export default function SettingsPage() {
                   >
                     <div>
                       <span className="font-medium">{module.label}</span>
-                      {module.planned && (
-                        <p className="mt-1 text-xs font-medium uppercase tracking-wider text-[var(--text-secondary)]">
-                          Planned
-                        </p>
-                      )}
                     </div>
                     <button
                       onClick={() => toggleModule(module.key)}
-                      disabled={module.planned}
                       className={`relative h-7 w-14 rounded-full transition disabled:cursor-not-allowed disabled:opacity-60 ${
                         modules[module.key] ? "bg-green-500" : "bg-gray-300"
                       }`}
