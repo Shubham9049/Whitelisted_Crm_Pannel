@@ -66,6 +66,11 @@ const settingsSchema = new mongoose.Schema({
       default: true,
     },
 
+    analytics: {
+      type: Boolean,
+      default: true,
+    },
+
     blogs: {
       type: Boolean,
       default: true,

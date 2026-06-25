@@ -22,6 +22,11 @@ import {
 
 const moduleCategories = [
   {
+    title: "Overview",
+    description: "Capture, qualify, and follow up with incoming prospects.",
+    modules: [{ key: "analytics", label: "Analytics" }],
+  },
+  {
     title: "Lead Generation",
     description: "Capture, qualify, and follow up with incoming prospects.",
     modules: [

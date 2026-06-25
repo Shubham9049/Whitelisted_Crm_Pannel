@@ -24,6 +24,8 @@ import {
 
 import Cookies from "js-cookie";
 import { FaUserGraduate } from "react-icons/fa6";
+import { GrAnalytics } from "react-icons/gr";
+import { IoAnalyticsOutline } from "react-icons/io5";
 
 export default function AdminLayout({
   children,
@@ -44,6 +46,12 @@ export default function AdminLayout({
           icon: <Gauge size={18} />,
           label: "Dashboard",
           to: "/admin",
+        },
+        {
+          key: "analytics",
+          icon: <IoAnalyticsOutline size={18} />,
+          label: "Analytics",
+          to: "/admin/analytics",
         },
       ],
     },
